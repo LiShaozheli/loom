@@ -1,4 +1,4 @@
-﻿import { test } from 'node:test';
+import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -34,8 +34,10 @@ test('会话自测：13 轮真实用法', async (t) => {
   const { call, cleanups, names } = boot(path.join(dir, 'loom.db'));
 
   try {
-    await t.test('0. 五个工具都在', () => {
-      assert.deepEqual(names.sort(), ['memory_decay', 'memory_recall', 'memory_settle', 'memory_stats', 'memory_write']);
+    await t.test('0. 七个工具都在', () => {
+      assert.deepEqual(names.sort(), [
+        'memory_decay', 'memory_forget', 'memory_recall', 'memory_settle', 'memory_stats', 'memory_verify', 'memory_write',
+      ]);
     });
 
     await t.test('1. 写一条：汉字置信 + 无尾也接受', async () => {
@@ -130,7 +132,21 @@ test('会话自测：13 轮真实用法', async (t) => {
       assert.ok(r.updated >= 1);
     });
 
-    await t.test('13. 遗忘扫描：默认只预览', async () => {
+    await t.test('13. L0 哈希链可验', async () => {
+      const v = await call('memory_verify', {});
+      assert.equal(v.ok, true, JSON.stringify(v));
+      assert.ok(v.events >= 3, '事件数 ' + v.events);
+    });
+
+    await t.test('14. 遗忘：失效但不物理删除', async () => {
+      const w = await call('memory_write', { line: '待删条目：临时实验用的开关。', kind: 'fact' });
+      const f2 = await call('memory_forget', { id: w.id.slice(0, 8), reason: '测试' });
+      assert.equal(f2.ok, true);
+      const v = await call('memory_verify', {});
+      assert.equal(v.ok, true, '遗忘后链仍可验');
+    });
+
+    await t.test('15. 遗忘扫描：默认只预览', async () => {
       const r = await call('memory_decay', {});
       assert.equal(r.applied, false);
       assert.ok(r.counts.keep >= 1);

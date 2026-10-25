@@ -15,6 +15,7 @@ import { recall } from './vendor/recall.js';
 import { render } from './vendor/render.js';
 import { settleTurn } from './vendor/settle.js';
 import { sweep } from './vendor/decay.js';
+import { Chronicle } from './vendor/chronicle.js';
 import { SqliteLedger } from './vendor/sqlite-ledger.js';
 
 const text = (s) => [{ type: 'text', text: String(s) }];
@@ -37,6 +38,10 @@ export function apply(ctx, config = {}) {
 
   fs.mkdirSync(path.dirname(dbPath), { recursive: true });
   const ledger = new SqliteLedger(dbPath);
+
+  // L0：编年层。每次写入都追加到哈希链，账本可从链重建、可验未篡改。
+  const chronicle = new Chronicle(path.join(path.dirname(dbPath), 'chronicle'));
+  const epoch = chronicle.meta.epochs?.['ep-live'] ? 'ep-live' : chronicle.createEpoch('ep-live');
 
   ctx.effect(() => () => ledger.close());
 
@@ -70,6 +75,9 @@ export function apply(ctx, config = {}) {
         // 让使用者为了过校验去编一个来源，是把结构信息推给人填。
         source: { eventId: parseTail(args.line)?.source ?? '#会话' },
       });
+      if (r.ok) {
+        chronicle.append(epoch, { claimId: r.claim.id, kind: r.claim.kind, aiw: r.claim.aiw, at: Date.now() });
+      }
       return {
         ok: r.ok,
         verdict: r.gate.verdict,
@@ -178,7 +186,54 @@ export function apply(ctx, config = {}) {
       const active = ledger.active();
       const byKind = {};
       for (const c of active) byKind[c.kind] = (byKind[c.kind] ?? 0) + 1;
-      return { dbPath, total: active.length, byKind, render: policy };
+      return { dbPath, total: active.length, byKind, render: policy, epoch };
+    },
+  });
+
+  // ---- 编年层校验 ----
+  ctx.tools.register({
+    name: 'memory_verify',
+    description: '校验 L0 哈希链：条目数、链是否连续、有没有被改写。',
+    parameters: { type: 'object', properties: {} },
+    output: OUT,
+    async execute() {
+      const v = chronicle.verify(epoch);
+      let events = 0;
+      try {
+        events = chronicle.read(epoch).length;
+      } catch {
+        events = -1;
+      }
+      return { ...v, events, epoch, destroyed: chronicle.isDestroyed(epoch) };
+    },
+  });
+
+  // ---- 遗忘单条 ----
+  ctx.tools.register({
+    name: 'memory_forget',
+    description:
+      '让一条记忆失效（不物理删除）：标 validTo、指向一条墓碑，并在 L0 记一笔。' +
+      '整段销毁要用 CLI 的 epoch 删除（crypto-shredding），这里只处理单条。',
+    parameters: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '记忆 id（可只给前 8 位）' },
+        reason: { type: 'string', description: '为什么删，会留档' },
+      },
+      required: ['id'],
+    },
+    output: OUT,
+    async execute(args) {
+      const id = String(args.id ?? '').trim();
+      const claim = ledger.get(id) ?? ledger.active().find((c) => c.id.startsWith(id));
+      if (!claim) return { ok: false, reason: '找不到这条记忆' };
+
+      const tomb = { id: `tomb-${claim.id.slice(0, 8)}`, kind: claim.kind, body: '（已删除）', aiw: '（已删除）', title: '（已删除）', confidence: 'high', source: { eventId: '#forget' }, epochId: claim.epochId, taint: 'none', validFrom: Date.now(), salience: 0, useCount: 0, cold: true };
+      ledger.put(tomb);
+      ledger.supersede(claim.id, tomb.id, args.reason ?? '用户要求');
+      chronicle.append(epoch, { forget: claim.id, reason: args.reason ?? '用户要求', at: Date.now() });
+
+      return { ok: true, id: claim.id.slice(0, 8), supersededBy: tomb.id.slice(0, 8) };
     },
   });
 }
