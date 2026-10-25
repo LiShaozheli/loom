@@ -164,13 +164,21 @@ npm run settle            # 归因实测：引用 vs 词面
 
 ## DSH 插件壳（W7）
 
-`packages/loom-dsh/` 是一个 Host-only bundle，注册三个工具：
+`packages/loom-dsh/` 是一个 Host-only bundle，注册八个工具：
 
 | 工具 | 作用 |
 | --- | --- |
-| `memory_write` | 写入一条 AI文（带尾也行，`ingest` 会剥）；传 `original` 才做保真校验 |
-| `memory_recall` | 按问题取回证据，预算内正文 → 标题 → 指针 |
-| `memory_stats` | 条目数与按类型分布 |
+| `memory_write` | 写入一条 AI文（尾部可省；来源默认记「会话」） |
+| `memory_recall` | 按问题取回证据，附带可直接注入的 `rendered` 文本 |
+| `memory_outline` | 先看目录：按类型分组 + 标题，适合"不确定记过什么" |
+| `memory_settle` | 结账：哪些被用到、对不对 → 改权重 |
+| `memory_decay` | 遗忘扫描（默认预览，`apply` 才标冷） |
+| `memory_verify` | 校验 L0 哈希链：条目数、链是否连续 |
+| `memory_forget` | 单条失效（不物理删除，墓碑留档） |
+| `memory_stats` | 账本概况 |
+
+写入路径已经接上 **L0 编年层**：每次成功写入都会追加到哈希链，
+`memory_verify` 随时可验"记忆没被改写"。
 
 ```bash
 node tools/plugin-smoke.mjs    # 给 apply() 一个假 ctx，验证工具契约
@@ -237,15 +245,26 @@ npm run dedupe              # 合并：保留最新，其余 supersede（不删�
 
 > 分词规则变了，索引要重算：`npm run reindex`（会先备份）。
 
+## 你睡觉这段时间补的
+
+| 模块 | 内容 |
+| --- | --- |
+| `src/decay.js` | 遗忘执行者：kind 差异化半衰期 + 用进废退 + 三档降级 |
+| `src/render.js` | 三种渲染策略：legend / plain / xml |
+| `src/transfer.js` | 导出/导入：可读 JSON，按内容指纹去重 |
+| 插件 | 8 个工具；写入接 L0 哈希链；`memory_verify` / `memory_forget` / `memory_outline` |
+| 测试 | 96 → 98，含 5000 条规模测试（单次检索 0.1ms） |
+
+详见 `WAKE-UP.md`（起床报告）。
+
 ## 进度
 
 - ✅ W1 骨架 + 契约 + 闸门
 - ✅ W2 L0 哈希链 / epoch 加密、L1 SQLite + bigram、写入收口
 - ✅ W3 must_keep 前移 + 外部引用时效 + Distill 接线（通过率 100%）
 - ✅ W4 三问召回（admission / router / outline）
-- ✅ W6 Settle 归因与权重（引用率 100%）
-- 🟡 W7 插件壳已装入 profile，**待重启激活**；自动注入与 Settle 接线未做
-- ⬜ W5 渲染层
-- ⬜ W6 剩余：Decay scheduler
+- ✅ W5 渲染层（三策略）
+- ✅ W6 Settle 归因 + Decay scheduler
+- 🟡 W7 插件壳：8 个工具、L0 已接；**待重启激活**；自动注入未做
 
 基线在 `../aiw/`：200 题、7 种条件、真 token。任何改动都要能在那里跑出不低于 89% 的 disc 通过率。

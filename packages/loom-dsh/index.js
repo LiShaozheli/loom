@@ -176,6 +176,33 @@ export function apply(ctx, config = {}) {
     },
   });
 
+  // ---- 目录 ----
+  ctx.tools.register({
+    name: 'memory_outline',
+    description:
+      '先看目录再决定查什么：按类型列出分组与条目标题，可选只看某一类。' +
+      '适合「我不确定自己记过什么」的场景。',
+    parameters: {
+      type: 'object',
+      properties: {
+        kind: { type: 'string', description: '只看这一类，例如 rule / fact / pref' },
+        limit: { type: 'number', description: '每组最多列出几条标题，默认 5' },
+      },
+    },
+    output: OUT,
+    async execute(args = {}) {
+      const limit = Number(args.limit ?? 5);
+      const active = ledger.active(args.kind);
+      const groups = {};
+      for (const c of active) {
+        groups[c.kind] ??= { count: 0, titles: [] };
+        groups[c.kind].count++;
+        if (groups[c.kind].titles.length < limit) groups[c.kind].titles.push(c.title);
+      }
+      return { total: active.length, groups };
+    },
+  });
+
   // ---- 观测 ----
   ctx.tools.register({
     name: 'memory_stats',

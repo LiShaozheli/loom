@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+﻿import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -34,9 +34,9 @@ test('会话自测：13 轮真实用法', async (t) => {
   const { call, cleanups, names } = boot(path.join(dir, 'loom.db'));
 
   try {
-    await t.test('0. 七个工具都在', () => {
+    await t.test('0. 八个工具都在', () => {
       assert.deepEqual(names.sort(), [
-        'memory_decay', 'memory_forget', 'memory_recall', 'memory_settle', 'memory_stats', 'memory_verify', 'memory_write',
+        'memory_decay', 'memory_forget', 'memory_outline', 'memory_recall', 'memory_settle', 'memory_stats', 'memory_verify', 'memory_write',
       ]);
     });
 
