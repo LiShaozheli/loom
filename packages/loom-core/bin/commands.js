@@ -15,6 +15,8 @@ import { Chronicle } from '../src/chronicle.js';
 import { SqliteLedger } from '../src/sqlite-ledger.js';
 import { stripTail, parseTail } from '../src/aiw.js';
 import { chars4Counter } from '../src/contracts.js';
+import { exportToFile, importFromFile } from '../src/transfer.js';
+import { sweep } from '../src/decay.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, '../../../..');
@@ -22,6 +24,10 @@ const repo = path.resolve(here, '../../../..');
 export const corpusPath = path.join(repo, 'aiw', 'corpus.json');
 
 const loadCorpus = () => JSON.parse(fs.readFileSync(corpusPath, 'utf8'));
+
+/** 与插件一致的默认库路径 */
+export const liveDbPath = () =>
+  path.join(process.env.DSH_HOME ?? path.join(os.homedir(), '.dsh'), 'loom', 'loom.db');
 
 function seedLedger(ledger, items, epoch) {
   let accepted = 0;
@@ -229,4 +235,31 @@ export function gateFile(file) {
   probe.close();
   console.log(`${file}: ${lines.length} 行 · 通过 ${lines.length - rej} · 拒绝 ${rej}`);
   process.exit(rej ? 1 : 0);
+}
+
+/** 导出到文件 */
+export function exportCmd(file) {
+  const db = new SqliteLedger(liveDbPath());
+  const bundle = exportToFile(db, file);
+  db.close();
+  console.log(`已导出 ${bundle.count} 条 → ${file}`);
+}
+
+/** 从文件导入 */
+export function importCmd(file) {
+  const db = new SqliteLedger(liveDbPath());
+  const r = importFromFile(db, file);
+  db.close();
+  console.log(`导入完成：新增 ${r.added} · 跳过（已存在）${r.skipped} · 共 ${r.total}`);
+}
+
+/** 遗忘扫描 */
+export function decayCmd(apply) {
+  const db = new SqliteLedger(liveDbPath());
+  const r = sweep(db, { apply });
+  for (const row of r.rows.slice(0, 20)) {
+    console.log(`  ${row.action.padEnd(10)} ${row.id.slice(0, 8)} ${row.kind.padEnd(9)} score=${row.score} ${row.title}`);
+  }
+  console.log(`\n${apply ? '已执行' : '预览'}：${JSON.stringify(r.counts)}`);
+  db.close();
 }

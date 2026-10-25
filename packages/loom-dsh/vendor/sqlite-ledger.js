@@ -1,4 +1,4 @@
-﻿/**
+/**
  * L1 账本：SQLite + FTS5 bigram。
  *
  * 为什么不是默认分词器：unicode61 把「用户彻底怒了」当一个词，搜「彻底」命中 0；
@@ -162,13 +162,19 @@ export class SqliteLedger {
     }
   }
 
-  /** 结算写回：salience / useCount / lastUsedAt */
+  /** 结算写回：salience / useCount / lastUsedAt / cold */
   touch(id, patch) {
     const cur = this.get(id);
     if (!cur) return null;
     this.db
-      .prepare('UPDATE claim SET salience = ?, use_count = ?, last_used_at = ? WHERE id = ?')
-      .run(patch.salience ?? cur.salience, patch.useCount ?? cur.useCount, patch.lastUsedAt ?? cur.lastUsedAt ?? null, id);
+      .prepare('UPDATE claim SET salience = ?, use_count = ?, last_used_at = ?, cold = ? WHERE id = ?')
+      .run(
+        patch.salience ?? cur.salience,
+        patch.useCount ?? cur.useCount,
+        patch.lastUsedAt ?? cur.lastUsedAt ?? null,
+        (patch.cold ?? cur.cold) ? 1 : 0,
+        id
+      );
     return this.get(id);
   }
 

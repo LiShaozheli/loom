@@ -29,13 +29,13 @@ function boot(dbPath) {
   return { call, cleanups, names: [...tools.keys()] };
 }
 
-test('会话自测：10 轮真实用法', async (t) => {
+test('会话自测：13 轮真实用法', async (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'loom-conv-'));
   const { call, cleanups, names } = boot(path.join(dir, 'loom.db'));
 
   try {
-    await t.test('0. 三个工具都在', () => {
-      assert.deepEqual(names.sort(), ['memory_recall', 'memory_stats', 'memory_write']);
+    await t.test('0. 五个工具都在', () => {
+      assert.deepEqual(names.sort(), ['memory_decay', 'memory_recall', 'memory_settle', 'memory_stats', 'memory_write']);
     });
 
     await t.test('1. 写一条：汉字置信 + 无尾也接受', async () => {
@@ -115,6 +115,25 @@ test('会话自测：10 轮真实用法', async (t) => {
       const used = r.usedTokens ?? 0;
       assert.ok(used <= 20, `用了 ${used}/20`);
       assert.ok(r.items.length + r.pointers.length > 0, '至少给点东西');
+    });
+    await t.test('11. 取回带渲染层（默认 legend）', async () => {
+      const r = await call('memory_recall', { query: '预发端口' });
+      assert.ok(r.rendered.includes('符号：'), '应带符号表');
+      assert.ok(r.rendered.includes('[#'), '应带引用编号');
+    });
+
+    await t.test('12. 结算：被引用的条目涨权', async () => {
+      const w = await call('memory_write', { line: '结算测试条目：发布前跑 smoke。', kind: 'proc' });
+      const r = await call('memory_settle', { used: [w.id.slice(0, 8)], correct: true });
+      assert.equal(r.ok, true);
+      assert.equal(r.used.length, 1);
+      assert.ok(r.updated >= 1);
+    });
+
+    await t.test('13. 遗忘扫描：默认只预览', async () => {
+      const r = await call('memory_decay', {});
+      assert.equal(r.applied, false);
+      assert.ok(r.counts.keep >= 1);
     });
   } finally {
     for (const c of cleanups) c();

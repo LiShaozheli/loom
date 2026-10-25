@@ -6,11 +6,15 @@
  *   loom verify               工程门禁（CI 用）
  *   loom recall "问题…"        三问：要不要查 / 查哪类 / 取多少
  *   loom gate <file.aiw>      校验作者格式
+ *   loom export <file>        导出可移植 JSON
+ *   loom import <file>        导入（按内容指纹去重）
+ *   loom decay [--apply]      遗忘扫描（默认预览）
  */
 
-import { demo, verify, recallCmd, gateFile } from './commands.js';
+import { demo, verify, recallCmd, gateFile, exportCmd, importCmd, decayCmd } from './commands.js';
 
-const [cmd, arg] = process.argv.slice(2);
+const args = process.argv.slice(2);
+const [cmd, arg] = args;
 
 switch (cmd) {
   case 'demo':
@@ -29,7 +33,24 @@ switch (cmd) {
     }
     gateFile(arg);
     break;
+  case 'export':
+    if (!arg) {
+      console.error('用法：loom export <file.json>');
+      process.exit(2);
+    }
+    exportCmd(arg);
+    break;
+  case 'import':
+    if (!arg) {
+      console.error('用法：loom import <file.json>');
+      process.exit(2);
+    }
+    importCmd(arg);
+    break;
+  case 'decay':
+    decayCmd(args.includes('--apply'));
+    break;
   default:
-    console.log('用法：loom <demo|verify|recall|gate> [参数]');
+    console.log('用法：loom <demo|verify|recall|gate|export|import|decay> [参数]');
     process.exit(cmd ? 2 : 0);
 }
