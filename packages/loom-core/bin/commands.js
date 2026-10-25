@@ -263,3 +263,23 @@ export function decayCmd(apply) {
   console.log(`\n${apply ? '已执行' : '预览'}：${JSON.stringify(r.counts)}`);
   db.close();
 }
+
+/** 列出编年层的时间片 */
+export function epochsCmd() {
+  const chron = new Chronicle(path.join(path.dirname(liveDbPath()), 'chronicle'));
+  for (const e of chron.epochs()) {
+    console.log(`  ${e.id.padEnd(16)} ${e.destroyed ? '已销毁' : '在'} ${new Date(e.createdAt).toISOString().slice(0, 10)}${e.reason ? '  ' + e.reason : ''}`);
+  }
+}
+
+/** 销毁一个时间片（crypto-shredding：密钥销毁，正文不可再读，墓碑留在链上） */
+export function shredCmd(epochId, reason = '用户要求') {
+  const chron = new Chronicle(path.join(path.dirname(liveDbPath()), 'chronicle'));
+  if (!chron.meta.epochs[epochId]) {
+    console.error(`没有这个时间片：${epochId}`);
+    process.exit(2);
+  }
+  chron.destroyEpoch(epochId, reason);
+  const v = chron.verify(epochId);
+  console.log(`已销毁 ${epochId}：内容不可读，墓碑已留，链仍可验（${v.ok ? '是' : '否'}）`);
+}
