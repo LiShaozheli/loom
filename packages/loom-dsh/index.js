@@ -1,4 +1,4 @@
-/**
+﻿/**
  * LOOM 的 DSH 插件壳。
  *
  * 五个工具：写 / 读 / 结算 / 遗忘扫描 / 统计。
@@ -41,7 +41,9 @@ export function apply(ctx, config = {}) {
 
   // L0：编年层。每次写入都追加到哈希链，账本可从链重建、可验未篡改。
   const chronicle = new Chronicle(path.join(path.dirname(dbPath), 'chronicle'));
-  const epoch = chronicle.meta.epochs?.['ep-live'] ? 'ep-live' : chronicle.createEpoch('ep-live');
+  // L0 按周期切片：删除权的最小单位是 epoch，"删掉某一周"要能独立成立。
+  const epochDays = Number(config.epochDays ?? 7);
+  let epoch = chronicle.currentEpoch({ everyDays: epochDays });
 
   ctx.effect(() => () => ledger.close());
 
@@ -76,6 +78,7 @@ export function apply(ctx, config = {}) {
         source: { eventId: parseTail(args.line)?.source ?? '#会话' },
       });
       if (r.ok) {
+        epoch = chronicle.currentEpoch({ everyDays: epochDays });
         chronicle.append(epoch, { claimId: r.claim.id, kind: r.claim.kind, aiw: r.claim.aiw, at: Date.now() });
       }
       return {
@@ -224,14 +227,16 @@ export function apply(ctx, config = {}) {
     parameters: { type: 'object', properties: {} },
     output: OUT,
     async execute() {
-      const v = chronicle.verify(epoch);
-      let events = 0;
-      try {
-        events = chronicle.read(epoch).length;
-      } catch {
-        events = -1;
-      }
-      return { ...v, events, epoch, destroyed: chronicle.isDestroyed(epoch) };
+      const epochs = chronicle.epochs();
+      const rows = epochs.map((e) => {
+        if (e.destroyed) return { id: e.id, destroyed: true, events: 0, ok: true };
+        const v = chronicle.verify(e.id);
+        let events = 0;
+        try { events = chronicle.read(e.id).length; } catch { events = -1; }
+        return { id: e.id, destroyed: false, events, ok: v.ok };
+      });
+      const events = rows.reduce((n, r) => n + Math.max(0, r.events), 0);
+      return { ok: rows.every((r) => r.ok), events, epochs: rows.length, current: epoch, detail: rows };
     },
   });
 

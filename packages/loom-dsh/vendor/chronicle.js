@@ -61,12 +61,38 @@ export class Chronicle {
   }
 
   /** 开一个新的时间片；返回 epochId */
-  createEpoch(id = `ep-${Date.now()}`) {
+  createEpoch(id = `ep-${Date.now()}`, { now = Date.now() } = {}) {
     const key = crypto.randomBytes(32);
-    this.meta.epochs[id] = { wrapped: wrap(this.master, key), createdAt: Date.now() };
+    this.meta.epochs[id] = { wrapped: wrap(this.master, key), createdAt: now };
     fs.writeFileSync(this.#logPath(id), '', 'utf8');
     this.#save();
     return id;
+  }
+
+  /**
+   * 当前该写进哪个时间片。
+   *
+   * 轮换的意义：删除权的最小单位是 epoch。所有写入都进同一个 epoch 时，
+   * "删掉某一周"就变成了"删掉全部"。所以按周期切片，删一片不影响其余。
+   */
+  currentEpoch({ everyDays = 7, now = Date.now(), prefix = 'ep' } = {}) {
+    const newest = Object.entries(this.meta.epochs).sort((a, b) => b[1].createdAt - a[1].createdAt)[0];
+    if (newest && now - newest[1].createdAt < everyDays * 86_400_000) return newest[0];
+
+    const d = new Date(now);
+    const stamp = `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, '0')}${String(d.getUTCDate()).padStart(2, '0')}`;
+    let id = `${prefix}-${stamp}`;
+    let n = 1;
+    while (this.meta.epochs[id]) id = `${prefix}-${stamp}-${++n}`;
+    return this.createEpoch(id, { now });
+  }
+
+  /** 列出所有时间片（含墓碑） */
+  epochs() {
+    return Object.entries(this.meta.epochs)
+      .map(([id, rec]) => ({ id, createdAt: rec.createdAt, destroyed: false }))
+      .concat(this.meta.tombstones.map((t) => ({ id: t.epochId, createdAt: t.at, destroyed: true, reason: t.reason })))
+      .sort((a, b) => a.createdAt - b.createdAt);
   }
 
   #logPath(epochId) {
