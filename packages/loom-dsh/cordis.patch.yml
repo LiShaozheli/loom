@@ -1,0 +1,6 @@
+- insert:
+    - id: loom-memory
+      name: loom-memory
+      config:
+        budget: 300
+        dbPath: ''

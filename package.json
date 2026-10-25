@@ -1,0 +1,32 @@
+{
+  "name": "loom",
+  "version": "0.4.0",
+  "private": true,
+  "type": "module",
+  "description": "LOOM — 分层记忆：AI文 做证据、题档 做路标、哈希链保证可验、epoch 加密保证可删",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.19 <23"
+  },
+  "bin": {
+    "loom": "./packages/loom-core/bin/loom.js"
+  },
+  "files": [
+    "packages/loom-core/src",
+    "packages/loom-core/bin",
+    "tools",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test packages/loom-core/test/*.test.js",
+    "demo": "node packages/loom-core/bin/loom.js demo",
+    "verify": "node packages/loom-core/bin/loom.js verify",
+    "recall": "node packages/loom-core/bin/loom.js recall",
+    "admission": "node tools/admission-eval.mjs",
+    "distill": "node tools/distill.mjs",
+    "settle": "node tools/settle-eval.mjs",
+    "dedupe": "node tools/dedupe.mjs",
+    "reindex": "node tools/reindex.mjs",
+    "check": "npm test && npm run verify"
+  }
+}

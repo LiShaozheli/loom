@@ -1,0 +1,24 @@
+{
+  "name": "loom-memory",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "LOOM 记忆：AI文 证据 + 闸门 + 预算取回",
+  "exports": {
+    ".": "./index.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "cordis.patch.yml",
+    "vendor",
+    "locale/*.json",
+    "icon.svg"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}
