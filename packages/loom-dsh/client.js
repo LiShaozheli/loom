@@ -10,27 +10,47 @@
 
 window.__ModuleLoader__.load({
   id: 'loom-memory',
-  factory(require) {
+  factory(require, env) {
     const React = require('react');
     const h = React.createElement;
 
-    // 探测包私有 RPC：文档说 Client 可以用 host.call，但宿主侧怎么注册没写。
-    // 这里只是"看得到什么"，不改变任何行为；结果直接显示在面板上。
+    // 探测包私有 RPC 的来源：模块表里没有 host/ctx，那它要么是工厂参数，要么在全局上。
     const probe = (() => {
-      const out = { host: null, ctx: null, location: '', fetch: typeof fetch };
+      const out = { location: '', requireHost: null, env: null, globalNames: [], windowNames: [] };
       try { out.location = window.location.protocol + '//' + window.location.host; } catch {}
+
       try {
-        const hostMod = require('host');
-        out.host = { ok: true, keys: Object.keys(hostMod || {}), call: typeof hostMod?.call };
+        const m = require('host');
+        out.requireHost = { ok: true, keys: Object.keys(m || {}) };
       } catch (e) {
-        out.host = { ok: false, err: String(e && e.message).slice(0, 120) };
+        out.requireHost = { ok: false, err: String(e && e.message).slice(0, 60) };
       }
+
+      const describe = (v) => {
+        if (v === undefined) return 'undefined';
+        if (v === null) return 'null';
+        if (typeof v !== 'object' && typeof v !== 'function') return typeof v;
+        const keys = [];
+        for (const k in v) keys.push(k);
+        return { type: typeof v, keys: keys.slice(0, 24) };
+      };
+
+      out.env = describe(env);
+      out.envHost = describe(env && env.host);
+      out.envCtx = describe(env && env.ctx);
+      out.envHostCall = env && env.host ? typeof env.host.call : 'undefined';
+      out.envCtxApply = env && env.ctx ? typeof env.ctx.apply : 'undefined';
+
       try {
-        const ctxMod = require('ctx');
-        out.ctx = { ok: true, keys: Object.keys(ctxMod || {}) };
-      } catch (e) {
-        out.ctx = { ok: false, err: String(e && e.message).slice(0, 120) };
-      }
+        out.bootKeys = Object.keys(window.__DSH_BOOT__ || {}).slice(0, 20);
+        out.globalHost = typeof globalThis.host;
+        out.windowHost = typeof window.host;
+      } catch {}
+      try {
+        out.globalNames = Object.keys(globalThis).filter((k) => /host|module|loader|dsh/i.test(k)).slice(0, 20);
+        out.windowNames = Object.keys(window).filter((k) => /host|module|loader|dsh/i.test(k)).slice(0, 20);
+      } catch {}
+
       return out;
     })();
 
