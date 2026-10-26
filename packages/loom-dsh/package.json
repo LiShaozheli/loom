@@ -1,6 +1,6 @@
 {
   "name": "loom-memory",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "private": true,
   "type": "module",
   "description": "LOOM 记忆：AI文 证据 + 写入闸门 + 预算取回 + 自动注入 + 侧边栏面板",

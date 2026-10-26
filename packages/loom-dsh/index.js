@@ -672,6 +672,9 @@ export function apply(ctx, config = {}) {
       // 不要造墓碑条目：墓碑一旦入库就成了"正常记忆"，会出现在列表和计数里。
       // 失效信息已经由 valid_to + supersede_log + L0 事件三处记录，足够回查。
       ledger.supersede(claim.id, null, args.reason ?? '用户要求');
+      // 一起写下的文档也要失活，否则记忆能靠文档检索"复活"
+      const docs = ledger.docsByBody(claim.body);
+      for (const d of docs) ledger.setDocCold(d.id, true);
       chronicle.append(epoch, { forget: claim.id, reason: args.reason ?? '用户要求', at: Date.now() });
 
       return { ok: true, id: claim.id.slice(0, 8), supersededBy: null };

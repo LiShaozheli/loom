@@ -185,6 +185,16 @@ test('会话自测：14 轮真实用法', async (t) => {
       assert.equal(titles.includes('（已删除）'), false, '墓碑不该出现在列表里');
     });
 
+    await t.test('15c. 遗忘：一起写下的文档也要失活', async () => {
+      const n = await call('memory_note', { text: '记住：这个仓库用 vitest 跑单测。', kind: 'pref' });
+      assert.equal(n.ok, true);
+      const before = await call('memory_doc_search', { query: 'vitest' });
+      assert.ok(before.total >= 1, '写入后应能搜到文档');
+      await call('memory_forget', { id: n.claimId, reason: '测试' });
+      const after = await call('memory_doc_search', { query: 'vitest' });
+      assert.equal(after.total, 0, '遗忘后文档不该还能搜到');
+    });
+
     await t.test('15b. 遗忘扫描：默认只预览', async () => {
       const r = await call('memory_decay', {});
       assert.equal(r.applied, false);

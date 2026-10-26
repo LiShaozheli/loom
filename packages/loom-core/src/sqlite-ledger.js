@@ -316,6 +316,16 @@ export class SqliteLedger {
     }
   }
 
+  /** 按正文找文档：遗忘一条记忆时，用它把一起写下的文档也标冷 */
+  docsByBody(body) {
+    return this.db.prepare('SELECT id,title FROM doc WHERE body = ? AND cold = 0').all(String(body ?? ''));
+  }
+
+  setDocCold(id, cold = true) {
+    this.db.prepare('UPDATE doc SET cold = ? WHERE id = ?').run(cold ? 1 : 0, id);
+    return this.getDoc(id);
+  }
+
   docs() {
     return this.db.prepare('SELECT id,title,tags,updated_at FROM doc WHERE cold = 0 ORDER BY updated_at DESC').all();
   }
