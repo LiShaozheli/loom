@@ -96,11 +96,23 @@ export function apply(ctx, config = {}) {
 
   const hotNow = () => buildHotMemory(ledger.active(), { maxBytes: hotBytes });
 
+  // Cordis 的服务代理对未声明 inject 的属性访问会抛错（?. 挡不住），
+  // 所以一律走 ctx.get()，并且整体兜底：注入失败不影响工具注册。
+  const promptSvc = () => {
+    try {
+      return typeof ctx.get === 'function' ? ctx.get('systemPrompt') : undefined;
+    } catch {
+      return undefined;
+    }
+  };
+
   // ---- 自动注入：每轮都带一小块热记忆 ----
   // 这是"替代 mnemon"的关键一块：记忆不该等模型想起来才查。
-  if (config.hot !== false && ctx.systemPrompt?.section) {
+  if (config.hot !== false) {
     try {
-      const dispose = ctx.systemPrompt.section({
+      const sp = promptSvc();
+      if (!sp?.section) throw new Error('no systemPrompt');
+      const dispose = sp.section({
         name: 'loom-hot-memory',
         order: 90,
         text: () => hotNow().text,
@@ -112,9 +124,11 @@ export function apply(ctx, config = {}) {
   }
 
   // ---- 使用协议：告诉模型什么时候该写、该查 ----
-  if (config.protocol !== false && ctx.systemPrompt?.section) {
+  if (config.protocol !== false) {
     try {
-      const dispose = ctx.systemPrompt.section({
+      const sp = promptSvc();
+      if (!sp?.section) throw new Error('no systemPrompt');
+      const dispose = sp.section({
         name: 'loom-memory-protocol',
         order: 91,
         text: PROTOCOL,

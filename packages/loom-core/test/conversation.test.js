@@ -17,20 +17,38 @@ function boot(dbPath) {
   const tools = new Map();
   const cleanups = [];
   const sections = [];
-  const ctx = {
+
+  const base = {
     tools: { register: (d) => (tools.set(d.name, d), () => tools.delete(d.name)) },
-    systemPrompt: {
-      section(s) {
-        sections.push(s);
-        return () => {};
-      },
-    },
     effect(fn) {
       const d = fn();
       if (typeof d === 'function') cleanups.push(d);
       return d;
     },
+    // Cordis 的可选服务访问方式
+    get(name) {
+      if (name === 'systemPrompt') {
+        return {
+          section(s) {
+            sections.push(s);
+            return () => {};
+          },
+        };
+      }
+      return undefined;
+    },
   };
+
+  // 按 Cordis 的行为模拟：访问未声明的服务会抛错，?. 挡不住。
+  // 上一版就是因为测试里的假 ctx 太宽松，才让线上报 cannot get property 而测试全绿。
+  const ctx = new Proxy(base, {
+    get(target, key) {
+      if (typeof key === 'symbol' || key === 'then') return undefined;
+      if (key in target) return target[key];
+      throw new Error(`cannot get property "${String(key)}" without inject`);
+    },
+  });
+
   apply(ctx, { dbPath, budget: 200 });
   const call = (name, args = {}) => tools.get(name).execute(args, {});
   return { call, cleanups, names: [...tools.keys()], sections };
