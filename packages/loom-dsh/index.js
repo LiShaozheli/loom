@@ -1,4 +1,4 @@
-/**
+﻿/**
  * LOOM 的 DSH 插件壳。
  *
  * 两块能力：
@@ -225,6 +225,48 @@ export function apply(ctx, config = {}) {
     async execute(args = {}) {
       const r = sweep(ledger, { apply: args.apply === true });
       return { applied: r.applied, counts: r.counts, rows: r.rows.slice(0, 20) };
+    },
+  });
+
+  // ---- 项目文档 ----
+  ctx.tools.register({
+    name: 'memory_doc_write',
+    description: '写一篇项目文档（长文，不受 AI文 短断言限制）。同标题视为同一篇，会更新而不是堆叠。',
+    parameters: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: '文档标题（也是身份）' },
+        body: { type: 'string', description: '正文，可以很长' },
+        tags: { type: 'string', description: '逗号分隔的标签，可省略' },
+      },
+      required: ['title', 'body'],
+    },
+    output: OUT,
+    async execute(args) {
+      const d = ledger.putDoc({ title: args.title, body: args.body, tags: args.tags ?? '' });
+      chronicle.append(epoch, { doc: d.id, title: d.title, at: Date.now() });
+      return { ok: true, id: d.id, title: d.title, chars: d.body.length };
+    },
+  });
+
+  ctx.tools.register({
+    name: 'memory_doc_search',
+    description: '在项目文档里检索（bigram + bm25），返回标题与正文片段。',
+    parameters: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: '检索词' },
+        limit: { type: 'number', description: '默认 5' },
+      },
+      required: ['query'],
+    },
+    output: OUT,
+    async execute(args) {
+      const hits = ledger.searchDocs(args.query, { limit: Number(args.limit ?? 5) });
+      return {
+        hits: hits.map((h) => ({ id: h.id, title: h.title, excerpt: h.body.slice(0, 160) })),
+        total: hits.length,
+      };
     },
   });
 

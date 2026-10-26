@@ -41,10 +41,10 @@ test('会话自测：14 轮真实用法', async (t) => {
   const { call, cleanups, names, sections } = boot(path.join(dir, 'loom.db'));
 
   try {
-    await t.test('0. 九个工具都在，且注册了热记忆 section', () => {
+    await t.test('0. 十一个工具都在，且注册了两段 prompt', () => {
       assert.deepEqual(names.sort(), [
-        'memory_decay', 'memory_forget', 'memory_hot', 'memory_outline', 'memory_recall',
-        'memory_settle', 'memory_stats', 'memory_verify', 'memory_write',
+        'memory_decay', 'memory_doc_search', 'memory_doc_write', 'memory_forget', 'memory_hot',
+        'memory_outline', 'memory_recall', 'memory_settle', 'memory_stats', 'memory_verify', 'memory_write',
       ]);
       assert.deepEqual(sections.map((x) => x.name).sort(), ['loom-hot-memory', 'loom-memory-protocol']);
     });
@@ -161,7 +161,17 @@ test('会话自测：14 轮真实用法', async (t) => {
       assert.ok(r.counts.keep >= 1);
     });
 
-    await t.test('16. 热记忆：自动注入的内容里有规则，且受字节约束', async () => {
+    await t.test('16. 文档：能写长文、能按词检索', async () => {
+      const w = await call('memory_doc_write', {
+        title: '发布流程',
+        body: '第一步跑 smoke.sh；第二步灰度 10%；第三步观察 30 分钟再全量。'.repeat(3),
+      });
+      assert.equal(w.ok, true);
+      const s2 = await call('memory_doc_search', { query: '灰度' });
+      assert.ok(s2.hits.some((h) => h.title === '发布流程'), JSON.stringify(s2));
+    });
+
+    await t.test('17. 热记忆：自动注入的内容里有规则，且受字节约束', async () => {
       const hot = await call('memory_hot', {});
       assert.equal(hot.injected, true);
       assert.ok(hot.bytes > 0);

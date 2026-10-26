@@ -1,4 +1,4 @@
-/**
+﻿/**
  * L1 账本：SQLite + FTS5 bigram。
  *
  * 为什么不是默认分词器：unicode61 把「用户彻底怒了」当一个词，搜「彻底」命中 0；
@@ -7,6 +7,7 @@
  */
 
 import { DatabaseSync } from 'node:sqlite';
+import { createHash } from 'node:crypto';
 import { bigrams } from './aiw.js';
 export { bigrams };
 
@@ -50,6 +51,22 @@ CREATE TABLE IF NOT EXISTS external_ref (
   PRIMARY KEY (claim_id, kind, target)
 );
 CREATE INDEX IF NOT EXISTS idx_ext_status ON external_ref(status);
+
+-- 项目文档：长文，不受 AI文 的短断言限制
+CREATE TABLE IF NOT EXISTS doc (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  body TEXT NOT NULL,
+  bg TEXT NOT NULL DEFAULT '',
+  tags TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  cold INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_doc_time ON doc(updated_at);
+CREATE VIRTUAL TABLE IF NOT EXISTS doc_fts USING fts5(
+  bg, title, tokenize='unicode61'
+);
 `;
 
 export class SqliteLedger {
@@ -186,5 +203,55 @@ export class SqliteLedger {
 
   refsOf(claimId) {
     return this.db.prepare('SELECT * FROM external_ref WHERE claim_id = ?').all(claimId);
+  }
+
+  // ---------------- 项目文档 ----------------
+
+  /** 写一篇文档；同标题视为同一篇（更新而不是堆叠） */
+  putDoc({ id, title, body, tags = '' , now = Date.now() }) {
+    const docId = id ?? `doc-${this.#hash(title)}`;
+    const bg = bigrams(`${title} ${body}`);
+    const cur = this.db.prepare('SELECT created_at FROM doc WHERE id = ?').get(docId);
+    this.db
+      .prepare(
+        `INSERT INTO doc (id,title,body,bg,tags,created_at,updated_at,cold) VALUES (?,?,?,?,?,?,?,0)
+         ON CONFLICT(id) DO UPDATE SET title=excluded.title, body=excluded.body, bg=excluded.bg, tags=excluded.tags, updated_at=excluded.updated_at`
+      )
+      .run(docId, title, body, bg, tags, cur?.created_at ?? now, now);
+    this.db.prepare('DELETE FROM doc_fts WHERE rowid = (SELECT rowid FROM doc WHERE id = ?)').run(docId);
+    const row = this.db.prepare('SELECT rowid FROM doc WHERE id = ?').get(docId);
+    this.db.prepare('INSERT INTO doc_fts (rowid, bg, title) VALUES (?,?,?)').run(row.rowid, bg, title);
+    return this.getDoc(docId);
+  }
+
+  getDoc(id) {
+    return this.db.prepare('SELECT * FROM doc WHERE id = ?').get(id) ?? null;
+  }
+
+  /** 文档检索：与 claim 同一套 bigram + OR + bm25 */
+  searchDocs(query, { limit = 5 } = {}) {
+    const terms = bigrams(query).split(' ').filter(Boolean);
+    if (!terms.length) return [];
+    const expr = terms.map((t) => `"${t.replace(/"/g, '')}"`).join(' OR ');
+    const match = `bg:(${expr}) OR title:(${expr})`;
+    try {
+      return this.db
+        .prepare(
+          `SELECT d.* FROM doc_fts f JOIN doc d ON d.rowid = f.rowid
+           WHERE doc_fts MATCH ? AND d.cold = 0 ORDER BY bm25(doc_fts) LIMIT ?`
+        )
+        .all(match, limit)
+        .map((r) => ({ id: r.id, title: r.title, body: r.body, tags: r.tags, updatedAt: r.updated_at }));
+    } catch {
+      return [];
+    }
+  }
+
+  docs() {
+    return this.db.prepare('SELECT id,title,tags,updated_at FROM doc WHERE cold = 0 ORDER BY updated_at DESC').all();
+  }
+
+  #hash(s) {
+    return createHash('sha256').update(String(s)).digest('hex').slice(0, 16);
   }
 }
