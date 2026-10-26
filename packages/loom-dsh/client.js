@@ -54,7 +54,9 @@ window.__ModuleLoader__.load({
     }
 
     function Panel() {
-      const [state, setState] = React.useState({ loading: true, data: null, error: null });
+      // 首屏优先用宿主注入的种子，避免"打开面板先空一下"
+      const seed = (typeof window !== 'undefined' && window.__LOOM_SEED__) || null;
+      const [state, setState] = React.useState({ loading: !seed, data: seed, error: null });
 
       const load = React.useCallback(() => {
         setState((s) => ({ ...s, loading: true, error: null }));
@@ -93,7 +95,18 @@ window.__ModuleLoader__.load({
           h('span', { style: { fontSize: 12, opacity: 0.6 } }, d && d.epoch ? '分片 ' + d.epoch : ''),
           h('button', { style: C.btn, onClick: load, type: 'button' }, '刷新')
         ),
-        state.error ? h('div', { style: C.err }, '读取失败：' + state.error) : null,
+        state.error
+          ? h(
+              'div',
+              { style: C.err },
+              '刷新失败：' + state.error + (d ? '（下面是上次的数据）' : ''),
+              h(
+                'button',
+                { style: { ...C.btn, marginLeft: 8 }, onClick: () => window.location.reload(), type: 'button' },
+                '重新加载页面'
+              )
+            )
+          : null,
         d && d.hot && d.hot.bytes
           ? h(
               'div',

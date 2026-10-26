@@ -274,58 +274,78 @@ export function apply(ctx, config = {}) {
 
 
 
-  // ---- 面板数据路由：/loom/state ----
-  // Client 侧取数据不能靠猜 RPC 契约；用宿主自己的 HTTP 路由最直接。
-  ctx.effect(() => {
-    let dispose = () => {};
-    try {
-      const web = typeof ctx.get === 'function' ? ctx.get('webServer') : undefined;
-      if (web?.register) {
-        dispose = web.register({
-          kind: 'exact',
-          path: '/loom/state',
-          handler: async (req, res) => {
-            try {
-              const active = ledger.active();
-              const byKind = {};
-              for (const c of active) byKind[c.kind] = (byKind[c.kind] ?? 0) + 1;
-              const rows = chronicle.epochs().map((e) => {
-                if (e.destroyed) return { ok: true, events: 0 };
-                const v = chronicle.verify(e.id);
-                let n = 0;
-                try { n = chronicle.read(e.id).length; } catch { n = 0; }
-                return { ok: v.ok, events: n };
-              });
-              const hot = hotNow();
-              const body = JSON.stringify({
-                total: active.length,
-                byKind,
-                epoch,
-                hot: { bytes: hot.bytes, rule: hot.counts.rule, pref: hot.counts.pref, fact: hot.counts.fact },
-                verify: {
-                  ok: rows.every((r) => r.ok),
-                  events: rows.reduce((n, r) => n + r.events, 0),
-                },
-                items: active
-                  .slice()
-                  .sort((a, b) => (b.validFrom ?? 0) - (a.validFrom ?? 0))
-                  .slice(0, 50)
-                  .map((c) => ({ id: c.id.slice(0, 8), kind: c.kind, aiw: c.aiw })),
-              });
-              res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
-              res.end(body);
-            } catch (e) {
-              res.writeHead(500, { 'content-type': 'application/json' });
-              res.end(JSON.stringify({ error: e.message }));
-            }
-          },
-        });
-      }
-    } catch {
-      // 没有 webServer 就不提供面板数据，工具照常可用
+  // ---- 面板数据：/loom/state 路由 + 首屏种子 ----
+  // webServer 不是启动即有：Cordis 文档明确说依赖它的注册要"服务就绪时"才发生。
+  // 所以用 ctx.inject 等它，而不是在 apply 里 get() 一次（那样拿到 undefined，静默失败）。
+  const snapshotForPanel = () => {
+    const active = ledger.active();
+    const byKind = {};
+    for (const c of active) byKind[c.kind] = (byKind[c.kind] ?? 0) + 1;
+    const rows = chronicle.epochs().map((e) => {
+      if (e.destroyed) return { ok: true, events: 0 };
+      const v = chronicle.verify(e.id);
+      let n = 0;
+      try { n = chronicle.read(e.id).length; } catch { n = 0; }
+      return { ok: v.ok, events: n };
+    });
+    const hot = hotNow();
+    return {
+      total: active.length,
+      byKind,
+      epoch,
+      hot: { bytes: hot.bytes, rule: hot.counts.rule, pref: hot.counts.pref, fact: hot.counts.fact },
+      verify: { ok: rows.every((r) => r.ok), events: rows.reduce((n, r) => n + r.events, 0) },
+      items: active
+        .slice()
+        .sort((a, b) => (b.validFrom ?? 0) - (a.validFrom ?? 0))
+        .slice(0, 50)
+        .map((c) => ({ id: c.id.slice(0, 8), kind: c.kind, aiw: c.aiw })),
+    };
+  };
+
+  const mountPanelData = (scope) => {
+    // Cordis 的服务代理对未 inject 的属性访问会抛错，所以每条路都单独兜
+    let web;
+    try { web = scope?.webServer; } catch { web = undefined; }
+    if (!web) {
+      try { web = typeof scope?.get === 'function' ? scope.get('webServer') : undefined; } catch { web = undefined; }
     }
-    return dispose;
-  });
+    if (!web?.register) return;
+    web.register({
+      kind: 'exact',
+      path: '/loom/state',
+      handler: async (req, res) => {
+        try {
+          res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
+          res.end(JSON.stringify(snapshotForPanel()));
+        } catch (e) {
+          res.writeHead(500, { 'content-type': 'application/json' });
+          res.end(JSON.stringify({ error: e.message }));
+        }
+      },
+    });
+    // 首屏种子：路由万一被鉴权挡住，面板也先有数据可看
+    if (typeof web.tapIndex === 'function') {
+      web.tapIndex((html) => {
+        let json = '{}';
+        try {
+          json = JSON.stringify(snapshotForPanel()).replace(/</g, '\\u003c');
+        } catch {}
+        const tag = `<script>window.__LOOM_SEED__=${json};</script></head>`;
+        return html.includes('</head>') ? html.replace('</head>', tag) : html + tag;
+      });
+    }
+  };
+
+  try {
+    if (typeof ctx.inject === 'function') {
+      ctx.inject(['webServer'], (inner) => mountPanelData(inner));
+    } else {
+      mountPanelData(ctx);
+    }
+  } catch {
+    // 没有 webServer 就不提供面板数据，工具照常可用
+  }
 
   // ---- 斜杠命令：不开界面也能查 ----
   ctx.effect(() => {
