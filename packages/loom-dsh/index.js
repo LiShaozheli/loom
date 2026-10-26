@@ -104,6 +104,11 @@ export function apply(ctx, config = {}) {
 
   const hotNow = () => buildHotMemory(ledger.active(), { maxBytes: hotBytes });
 
+  /** 面板允许改的配置键（白名单，避免任意写配置） */
+  const SETTABLE = new Set([
+    'budget', 'hot', 'hotBytes', 'protocol', 'autoCapture', 'autoCaptureLevel', 'epochDays', 'render', 'scope',
+  ]);
+
   // Cordis 的服务代理对未声明 inject 的属性访问会抛错（?. 挡不住），
   // 所以一律走 ctx.get()，并且整体兜底：注入失败不影响工具注册。
   const promptSvc = () => {
@@ -428,6 +433,36 @@ export function apply(ctx, config = {}) {
         .sort((a, b) => (b.validFrom ?? 0) - (a.validFrom ?? 0))
         .slice(0, 50)
         .map((c) => ({ id: c.id.slice(0, 8), kind: c.kind, aiw: c.aiw })),
+      docs: (() => {
+        try {
+          return ledger.docs().slice(0, 30).map((d) => ({ id: d.id, title: d.title, tags: d.tags, updatedAt: d.updated_at }));
+        } catch {
+          return [];
+        }
+      })(),
+      recent: (() => {
+        try {
+          return chronicle
+            .read(epoch)
+            .filter((ev) => ev?.event?.kind === 'msg')
+            .slice(-30)
+            .map((ev) => ({ role: ev.event.role, text: String(ev.event.text ?? '').slice(0, 240), at: ev.event.at }))
+            .reverse();
+        } catch {
+          return [];
+        }
+      })(),
+      config: {
+        budget,
+        hot: config.hot !== false,
+        hotBytes,
+        protocol: config.protocol !== false,
+        autoCapture: config.autoCapture !== false,
+        autoCaptureLevel,
+        epochDays,
+        render: policy,
+        scope: config.scope === 'workspace' ? 'workspace' : 'global',
+      },
     };
   };
 
@@ -439,6 +474,47 @@ export function apply(ctx, config = {}) {
       try { web = typeof scope?.get === 'function' ? scope.get('webServer') : undefined; } catch { web = undefined; }
     }
     if (!web?.register) return;
+    // 设置写入：面板表单 -> 宿主 configEditor 持久化
+    web.register({
+      kind: 'exact',
+      path: '/loom/config',
+      handler: async (req, res) => {
+        const cors = { 'access-control-allow-origin': '*', 'content-type': 'application/json; charset=utf-8' };
+        if (req?.method === 'OPTIONS') {
+          res.writeHead(204, { ...cors, 'access-control-allow-methods': 'POST, OPTIONS', 'access-control-max-age': '600' });
+          res.end();
+          return;
+        }
+        const reply = (code, obj) => {
+          res.writeHead(code, cors);
+          res.end(JSON.stringify(obj));
+        };
+        try {
+          let raw = '';
+          for await (const chunk of req) raw += chunk;
+          const body = JSON.parse(raw || '{}');
+          const key = String(body.key ?? '');
+          if (!SETTABLE.has(key)) return reply(400, { ok: false, error: '不可设置的键：' + key });
+
+          const editor = typeof ctx.get === 'function' ? ctx.get('configEditor') : undefined;
+          if (!editor?.edit || !editor?.entries) return reply(503, { ok: false, error: '本宿主没有 configEditor' });
+
+          const list = editor.entries();
+          const entry =
+            list.find((e) => e?.options?.id === 'loom-memory') ??
+            list.find((e) => e?.id === 'loom-memory') ??
+            list.find((e) => e?.name === 'loom-memory');
+          if (!entry) return reply(404, { ok: false, error: '找不到 loom-memory 这一行配置' });
+
+          const value = body.value;
+          await editor.edit(entry, (current) => ({ ...current, [key]: value }));
+          return reply(200, { ok: true, key, value, note: '已保存；部分设置需要重启或刷新页面生效' });
+        } catch (e) {
+          return reply(500, { ok: false, error: String(e?.message ?? e) });
+        }
+      },
+    });
+
     web.register({
       kind: 'exact',
       path: '/loom/state',
