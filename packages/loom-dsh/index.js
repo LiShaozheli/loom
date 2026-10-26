@@ -19,6 +19,7 @@ import { sweep } from './vendor/decay.js';
 import { buildHotMemory } from './vendor/hot.js';
 import { resolveDbPath } from './vendor/paths.js';
 import { detectIntent, stripCue } from './vendor/capture.js';
+import { pickDurable } from './vendor/autocapture.js';
 import { runLoomCommand } from './vendor/command.js';
 import { Chronicle } from './vendor/chronicle.js';
 import { SqliteLedger } from './vendor/sqlite-ledger.js';
@@ -51,6 +52,7 @@ export const Config = Schema
       hot: Schema.boolean().description('每轮自动注入热记忆').default(true),
       hotBytes: Schema.number().description('热记忆字节上限（进每一轮上下文，就是长期成本）').min(0).max(16384).default(2048),
       protocol: Schema.boolean().description('是否注入「什么时候该写、该查」的使用协议').default(true),
+      autoCapture: Schema.boolean().description('从对话里自动挑值得记的内容（规则判定，不调模型）').default(true),
       epochDays: Schema.number().description('L0 时间片长度（天）；删除权的最小单位').min(1).max(365).default(7),
       render: Schema.union([Schema.const('legend'), Schema.const('plain'), Schema.const('xml')])
         .description('取回结果的渲染策略')
@@ -137,6 +139,58 @@ export function apply(ctx, config = {}) {
       if (typeof dispose === 'function') ctx.effect(() => dispose);
     } catch {
       // 同上：注入是增强，不是前提
+    }
+  }
+
+
+  /** 收下一条内容：文档一定留，claim 能过闸门才留 */
+  const saveCaptured = (text, kind) => {
+    const content = String(text ?? '').trim();
+    if (!content) return null;
+    const doc = ledger.putDoc({ title: makeTitle(content, { max: 24 }), body: content, tags: kind });
+    chronicle.append(epoch, { doc: doc.id, title: doc.title, at: Date.now() });
+    const r = ingest({
+      line: content,
+      body: content,
+      kind,
+      epochId: 'ep-live',
+      ledger,
+      title: makeTitle(content),
+      source: { eventId: '#对话' },
+    });
+    let claimId = null;
+    if (r.ok) {
+      claimId = r.claim.id;
+      epoch = chronicle.currentEpoch({ everyDays: epochDays });
+      chronicle.append(epoch, { claimId, kind, aiw: r.claim.aiw, at: Date.now() });
+    }
+    return { docId: doc.id, claimId, rejected: r.ok ? null : r.gate.verdict, kind };
+  };
+
+  // ---- 自动捕获：每轮从用户输入里挑值得记的 ----
+  // 保守规则，不调模型；宁可漏，不可脏。
+  if (config.autoCapture !== false) {
+    try {
+      if (typeof ctx.on === 'function') {
+        ctx.on('agent/pre-step', (decision, next) => {
+          try {
+            const msgs = decision?.messages ?? [];
+            const lastUser = [...msgs].reverse().find((m) => m?.role === 'user');
+            const text = typeof lastUser?.content === 'string'
+              ? lastUser.content
+              : Array.isArray(lastUser?.content)
+                ? lastUser.content.map((b) => (typeof b?.text === 'string' ? b.text : '')).join(' ')
+                : '';
+            const pick = pickDurable(text);
+            if (pick.capture) saveCaptured(pick.text, pick.kind);
+          } catch {
+            // 捕获失败绝不能影响这一轮
+          }
+          return typeof next === 'function' ? next() : undefined;
+        });
+      }
+    } catch {
+      // 没有 pre-step 事件就不自动捕获，工具照常
     }
   }
 

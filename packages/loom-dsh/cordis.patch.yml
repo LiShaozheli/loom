@@ -11,6 +11,8 @@
         hotBytes: 2048
         # 把"什么时候该写、该查"讲给模型听
         protocol: true
+        # 从对话里自动挑值得记的（规则判定，不调模型）
+        autoCapture: true
         # L0 时间片长度（天）；删除权的最小单位就是它
         epochDays: 7
         # 取回时的渲染策略：legend | plain | xml
