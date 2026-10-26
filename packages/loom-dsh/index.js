@@ -118,7 +118,7 @@ export function apply(ctx, config = {}) {
 
   /** 面板允许改的配置键（白名单，避免任意写配置） */
   const SETTABLE = new Set([
-    'budget', 'hot', 'hotBytes', 'protocol', 'autoCapture', 'autoCaptureLevel', 'epochDays', 'render', 'scope', 'dbPath',
+    'budget', 'hot', 'hotBytes', 'protocol', 'autoCapture', 'autoCaptureLevel', 'epochDays', 'render', 'scope', 'dbPath', 'memoryScope',
   ]);
 
   // Cordis 的服务代理对未声明 inject 的属性访问会抛错（?. 挡不住），

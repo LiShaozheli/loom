@@ -75,22 +75,6 @@ window.__ModuleLoader__.load({
 
     const TABS = ['状态', '记忆', '归档', '文档', '设置'];
 
-    const BOOLS = [
-      ['hot', '每轮注入热记忆'],
-      ['protocol', '注入使用协议'],
-      ['autoCapture', '自动从对话里记录'],
-    ];
-    const ENUMS = [
-      ['autoCaptureLevel', '记录强度 normal / strict'],
-      ['render', '取回渲染 legend / plain / xml'],
-      ['scope', '作用域 global / workspace'],
-    ];
-    const NUMS = [
-      ['hotBytes', '热记忆字节上限'],
-      ['budget', '单次召回 token 预算'],
-      ['epochDays', '时间片长度（天）'],
-    ];
-
     function Panel() {
       const seed = (typeof window !== 'undefined' && window.__LOOM_SEED__) || null;
       const [state, setState] = React.useState({ loading: !seed, data: seed, error: null });
@@ -344,53 +328,137 @@ window.__ModuleLoader__.load({
       }
 
       if (tab === '设置') {
-        body = h('div', null,
-          BOOLS.map(([key, label]) => h('div', { key, style: C.row },
-            h('span', { style: C.label }, label),
-            h('button', { type: 'button', style: C.btn, onClick: () => save(key, !cfg[key]) },
-              cfg[key] ? '已开' : '已关'))),
-          ENUMS.map(([key, label]) => h('div', { key, style: C.row },
-            h('span', { style: C.label }, label),
-            h('input', {
-              style: { ...C.input, width: 120 },
-              value: draft[key] != null ? draft[key] : (cfg[key] || ''),
-              onChange: (e) => setDraft({ ...draft, [key]: e.target.value }),
-            }),
-            h('button', { type: 'button', style: C.btn, onClick: () => save(key, draft[key] != null ? draft[key] : cfg[key]) }, '保存'))),
-          h('div', { style: C.row },
-            h('span', { style: C.label }, '库文件路径（留空=默认）'),
-            h('input', {
-              style: { ...C.input, width: 200 },
-              placeholder: 'D:\\loom\\loom.db',
-              value: draft.dbPath != null ? draft.dbPath : '',
-              onChange: (e) => setDraft({ ...draft, dbPath: e.target.value }),
-            }),
-            h('button', { type: 'button', style: C.btn, onClick: () => save('dbPath', draft.dbPath || '') }, '保存')),
-          h('div', { style: C.meta }, '换路径 = 换一个库（旧数据不会自动搬过去）；重启后生效。想搬数据用「下载记忆包」再「导入」。'),
-          NUMS.map(([key, label]) => h('div', { key, style: C.row },
-            h('span', { style: C.label }, label),
-            h('input', {
-              style: C.input, type: 'number',
-              value: draft[key] != null ? draft[key] : (cfg[key] ?? ''),
-              onChange: (e) => setDraft({ ...draft, [key]: Number(e.target.value) }),
-            }),
-            h('button', { type: 'button', style: C.btn, onClick: () => save(key, Number(draft[key] != null ? draft[key] : cfg[key])) }, '保存'))),
-          saved ? h('div', { style: String(saved).startsWith('已保存') ? C.ok : C.err }, saved) : null,
-          h('div', { style: C.row },
-            h('span', { style: C.label }, '备份'),
+        const savedHint = saved ? h('div', { style: String(saved).startsWith('已保存') ? C.ok : C.err }, saved) : null;
+
+        // 「关 / 开」两态
+        const Toggle = ({ k, label, hint }) => {
+          const on = !!cfg[k];
+          return h('div', { style: C.settingRow },
+            h('div', null,
+              h('div', { style: C.label }, label),
+              hint ? h('div', { style: C.meta }, hint) : null),
             h('button', {
-              type: 'button', style: C.btn,
-              onClick: () => { if (base) window.open(base + '/loom/export.zip', '_blank'); },
-            }, '下载记忆包 ZIP')),
-          h('div', { style: C.meta }, '包含记忆、文档、文档历史与关系边；不含密钥。'),
-          h('div', { style: C.row },
-            h('span', { style: C.label }, '导入记忆包'),
-            h('input', {
-              type: 'file', accept: '.zip',
-              onChange: (e) => importZip(e.target.files && e.target.files[0]),
-            })),
+              type: 'button',
+              style: on ? C.pillOn : C.pillOff,
+              onClick: () => save(k, !on),
+            }, on ? '开' : '关'));
+        };
+
+        // 多选一：点一下就切，不用打字
+        const Choice = ({ k, label, hint, options }) => {
+          const cur = cfg[k];
+          return h('div', { style: C.settingRow },
+            h('div', null,
+              h('div', { style: C.label }, label),
+              hint ? h('div', { style: C.meta }, hint) : null),
+            h('div', { style: { display: 'flex', gap: 6 } },
+              options.map((o) => h('button', {
+                key: o.value,
+                type: 'button',
+                style: cur === o.value ? C.pillOn : C.pillOff,
+                onClick: () => save(k, o.value),
+              }, o.label))));
+        };
+
+        // 数字：给几档常用值，也允许手填
+        const Amount = ({ k, label, hint, unit, presets }) => {
+          const cur = draft[k] != null ? draft[k] : (cfg[k] ?? '');
+          return h('div', { style: C.settingRow },
+            h('div', null,
+              h('div', { style: C.label }, label),
+              hint ? h('div', { style: C.meta }, hint) : null),
+            h('div', { style: { display: 'flex', gap: 6, alignItems: 'center' } },
+              h('input', {
+                style: C.input, type: 'number', value: cur,
+                onChange: (e) => setDraft({ ...draft, [k]: Number(e.target.value) }),
+                onBlur: () => save(k, Number(draft[k] ?? cfg[k])),
+              }),
+              h('span', { style: C.meta }, unit),
+              (presets || []).map((p) => h('button', {
+                key: p, type: 'button', style: C.pillOff,
+                onClick: () => { setDraft({ ...draft, [k]: p }); save(k, p); },
+              }, String(p)))));
+        };
+
+        return h('div', null,
+          savedHint,
+
+          h('div', { style: C.groupTitle }, '记忆范围'),
+          h(Choice, {
+            k: 'memoryScope', label: '谁能看到这条记忆',
+            hint: '共享：所有会话共用一份。独立：每个会话只看自己写的 + 公共的。',
+            options: [{ value: 'shared', label: '共享' }, { value: 'session', label: '独立' }],
+          }),
+          h(Choice, {
+            k: 'scope', label: '记忆存在哪',
+            hint: '全局：跟着你走。工作区：只属于当前目录，换个目录就是另一份。',
+            options: [{ value: 'global', label: '全局' }, { value: 'workspace', label: '工作区' }],
+          }),
+
+          h('div', { style: C.groupTitle }, '每轮注入'),
+          h(Toggle, { k: 'hot', label: '每轮带上记忆', hint: '关掉后模型得自己想起来查。' }),
+          h(Amount, {
+            k: 'hotBytes', label: '注入上限', unit: '字节',
+            hint: '它进每一轮上下文，这个数字就是长期成本。约 3 字节 = 1 个汉字。',
+            presets: [1024, 2048, 4096],
+          }),
+          h(Toggle, { k: 'protocol', label: '带上使用说明', hint: '告诉模型什么时候该写、什么时候该查。' }),
+
+          h('div', { style: C.groupTitle }, '自动记录'),
+          h(Toggle, { k: 'autoCapture', label: '从对话里自动记', hint: '你说的事实、偏好会自己进记忆，不用特意吩咐。' }),
+          h(Choice, {
+            k: 'autoCaptureLevel', label: '记多宽',
+            hint: '宽松：连偏好和项目习惯一起记。严格：只认端口、路径、版本这类硬事实。',
+            options: [{ value: 'normal', label: '宽松' }, { value: 'strict', label: '严格' }],
+          }),
+
+          h('div', { style: C.groupTitle }, '存储'),
+          h('div', { style: C.settingRow },
+            h('div', null,
+              h('div', { style: C.label }, '库文件路径'),
+              h('div', { style: C.meta }, '留空用默认位置。换路径等于换一个空库，旧数据不会自动搬过去。')),
+            h('div', { style: { display: 'flex', gap: 6 } },
+              h('input', {
+                style: { ...C.input, width: 190 },
+                placeholder: '默认',
+                value: draft.dbPath != null ? draft.dbPath : '',
+                onChange: (e) => setDraft({ ...draft, dbPath: e.target.value }),
+              }),
+              h('button', { type: 'button', style: C.pillOff, onClick: () => save('dbPath', draft.dbPath || '') }, '保存'))),
+
+          h('div', { style: C.groupTitle }, '高级'),
+          h(Choice, {
+            k: 'render', label: '取回时的排版',
+            hint: '带图例：附一张符号说明。纯文字：不要符号。结构化：给程序读的。',
+            options: [{ value: 'legend', label: '带图例' }, { value: 'plain', label: '纯文字' }, { value: 'xml', label: '结构化' }],
+          }),
+          h(Amount, {
+            k: 'budget', label: '单次取回的预算', unit: 'token',
+            hint: '模型主动查一次最多拿多少。',
+            presets: [200, 300, 600],
+          }),
+          h(Amount, {
+            k: 'epochDays', label: '时间片长度', unit: '天',
+            hint: '删除的最小单位：删一段时间片 = 整段不可读，链仍可验。',
+            presets: [7, 30],
+          }),
+
+          h('div', { style: C.groupTitle }, '备份'),
+          h('div', { style: C.settingRow },
+            h('div', null,
+              h('div', { style: C.label }, '导出 / 导入'),
+              h('div', { style: C.meta }, 'ZIP 里是记忆、文档、文档历史、关系边；不含密钥。')),
+            h('div', { style: { display: 'flex', gap: 6, alignItems: 'center' } },
+              h('button', {
+                type: 'button', style: C.pillOff,
+                onClick: () => { if (base) window.open(base + '/loom/export.zip', '_blank'); },
+              }, '下载'),
+              h('input', {
+                type: 'file', accept: '.zip', style: { fontSize: 11, width: 150 },
+                onChange: (e) => importZip(e.target.files && e.target.files[0]),
+              }))),
           importMsg ? h('div', { style: String(importMsg).startsWith('导入完成') ? C.ok : C.err }, importMsg) : null,
-          h('div', { style: C.meta }, '改动会写进 profile 的 loom-memory 行；部分键需要重启生效。')
+          h('div', { style: C.meta }, '改动立即生效并写进配置；带 * 的项需要重启 DSH。'),
         );
       }
 
