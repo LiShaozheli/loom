@@ -13,6 +13,8 @@
         protocol: true
         # 从对话里自动挑值得记的（规则判定，不调模型）
         autoCapture: true
+        # normal 连偏好与项目陈述一起记；strict 只认标识符与参数
+        autoCaptureLevel: normal
         # L0 时间片长度（天）；删除权的最小单位就是它
         epochDays: 7
         # 取回时的渲染策略：legend | plain | xml

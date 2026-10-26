@@ -53,6 +53,9 @@ export const Config = Schema
       hotBytes: Schema.number().description('热记忆字节上限（进每一轮上下文，就是长期成本）').min(0).max(16384).default(2048),
       protocol: Schema.boolean().description('是否注入「什么时候该写、该查」的使用协议').default(true),
       autoCapture: Schema.boolean().description('从对话里自动挑值得记的内容（规则判定，不调模型）').default(true),
+      autoCaptureLevel: Schema.union([Schema.const('normal'), Schema.const('strict')])
+        .description('normal 连偏好与项目陈述一起记；strict 只认标识符与参数')
+        .default('normal'),
       epochDays: Schema.number().description('L0 时间片长度（天）；删除权的最小单位').min(1).max(365).default(7),
       render: Schema.union([Schema.const('legend'), Schema.const('plain'), Schema.const('xml')])
         .description('取回结果的渲染策略')
@@ -79,6 +82,7 @@ export function apply(ctx, config = {}) {
   const budget = Number(config.budget ?? 300);
   const policy = config.render ?? 'legend';
   const hotBytes = Number(config.hotBytes ?? DEFAULT_HOT_BYTES);
+  const autoCaptureLevel = config.autoCaptureLevel === 'strict' ? 'strict' : 'normal';
   const dbPath =
     config.dbPath && config.dbPath.trim()
       ? config.dbPath
@@ -181,7 +185,7 @@ export function apply(ctx, config = {}) {
               : Array.isArray(lastUser?.content)
                 ? lastUser.content.map((b) => (typeof b?.text === 'string' ? b.text : '')).join(' ')
                 : '';
-            const pick = pickDurable(text);
+            const pick = pickDurable(text, { level: autoCaptureLevel });
             if (pick.capture) saveCaptured(pick.text, pick.kind);
           } catch {
             // 捕获失败绝不能影响这一轮

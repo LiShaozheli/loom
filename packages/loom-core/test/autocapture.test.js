@@ -51,3 +51,12 @@ test('粘贴块与引用不自动记（真实踩到过）', () => {
   const quote = '文档里写着「记住要先备份」，你看对不对';
   assert.equal(pickDurable(quote).capture, false);
 });
+
+test('capture level：normal 连偏好陈述也记，strict 不记', () => {
+  assert.equal(pickDurable('我不喜欢注释太多').capture, true);
+  assert.equal(pickDurable('我不喜欢注释太多', { level: 'strict' }).capture, false);
+  assert.equal(pickDurable('这个项目的文档都写中文').capture, true);
+  assert.equal(pickDurable('这个项目的文档都写中文', { level: 'strict' }).capture, false);
+  // 问句仍然不记，任何级别
+  assert.equal(pickDurable('我不喜欢注释太多，对吗？').capture, false);
+});
