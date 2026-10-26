@@ -39,7 +39,7 @@
 | 图谱（link/related） | ✅ | `edge` 表 + `memory_link` / `memory_related`，支持四类边与 BFS |
 | 语义召回 | ❌ | 纯词面 |
 | 技能自进化 | ❌ | 不做，也不打算做 |
-| 侧边栏面板 | ❌ | 宿主侧只有 Host，没有 Client |
+| 侧边栏面板 | ❌ | 契约已查明（见下），缺宿主↔前端数据通道 |
 | 设置页 | ❌ | 没有 `Config`（见下） |
 | 自动写入 | 🟡 部分 | `memory_note` 原样捕获（不拒绝，长文进文档）+ 协议提示；真正的「不靠模型自觉」还没做 |
 
@@ -85,6 +85,20 @@
 6. 语义召回：bigram 对同义改写无能为力。
 
 ---
+
+## 侧边栏：已查明的契约
+
+读 `@deepseek-ai/dsh-client-ui-sidebar` 的 README 与 Slot 拓扑，结论：
+
+1. 图标注册进 **root 作用域的 `sidebar.panellist`**（list 槽）：`{ id, order, label }`，组件画图标
+2. **同一个 id 去 `main` 这个 keyed 槽注册面板主体**：`{ key: <同一个 id> }`
+3. 选中图标会在 `main` 里按 key 派发；**key 缺失会抛错且不改变当前选中**
+4. Client 侧不用打包，直接写 `window.__ModuleLoader__.load({ id, factory(require) })`，
+   `require('react')` 由宿主提供
+
+**还缺一环**：前端拿数据要 `host.call(method, args)`（Pakcage-private JSON RPC），
+但 Host 侧如何注册这些方法还没查明——所以这一版**没有**发 Client 半，
+避免"点了图标就抛错"这种坏体验。
 
 ## 五、什么时候可以关掉 mnemon
 
