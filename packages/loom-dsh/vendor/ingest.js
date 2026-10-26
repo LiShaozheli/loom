@@ -72,6 +72,7 @@ export function ingest(input) {
     salience: 1,
     useCount: 0,
     cold: false,
+    sessionId: input.sessionId ?? null,
   };
   ledger.put(claim);
 

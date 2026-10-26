@@ -55,6 +55,9 @@ export const Config = Schema
       hotBytes: Schema.number().description('热记忆字节上限（进每一轮上下文，就是长期成本）').min(0).max(16384).default(2048),
       protocol: Schema.boolean().description('是否注入「什么时候该写、该查」的使用协议').default(true),
       autoCapture: Schema.boolean().description('从对话里自动挑值得记的内容（规则判定，不调模型）').default(true),
+      memoryScope: Schema.union([Schema.const('shared'), Schema.const('session')])
+        .description('shared：所有会话共享记忆；session：只召回本会话 + 全局条目')
+        .default('shared'),
       autoCaptureLevel: Schema.union([Schema.const('normal'), Schema.const('strict')])
         .description('normal 连偏好与项目陈述一起记；strict 只认标识符与参数')
         .default('normal'),
@@ -85,6 +88,9 @@ export function apply(ctx, config = {}) {
   const policy = config.render ?? 'legend';
   const hotBytes = Number(config.hotBytes ?? DEFAULT_HOT_BYTES);
   const autoCaptureLevel = config.autoCaptureLevel === 'strict' ? 'strict' : 'normal';
+  // shared：所有会话同一份记忆；session：只召回「本会话 + 全局」条目
+  const memoryScope = config.memoryScope === 'session' ? 'session' : 'shared';
+  const scopeFilter = (sid) => (memoryScope === 'session' && sid ? { session: sid } : {});
   const dbPath =
     config.dbPath && config.dbPath.trim()
       ? config.dbPath
@@ -168,6 +174,7 @@ export function apply(ctx, config = {}) {
       ledger,
       title: makeTitle(content),
       source: { eventId: sessionId ? `#会话:${String(sessionId).slice(0, 8)}` : '#对话' },
+      sessionId: sessionId ?? null,
     });
     let claimId = null;
     if (r.ok) {
@@ -277,7 +284,7 @@ export function apply(ctx, config = {}) {
       required: ['line'],
     },
     output: OUT,
-    async execute(args) {
+    async execute(args, exec = {}) {
       const r = ingest({
         line: args.line,
         body: args.body ?? args.original ?? args.line,
@@ -289,6 +296,7 @@ export function apply(ctx, config = {}) {
         // 没写 #来源 时默认记成「会话」：工具调用天然来自当前对话，
         // 让使用者为了过校验去编一个来源，是把结构信息推给人填。
         source: { eventId: parseTail(args.line)?.source ?? '#会话' },
+        sessionId: exec?.agent?.id ?? null,
       });
       if (r.ok) {
         epoch = chronicle.currentEpoch({ everyDays: epochDays });
@@ -319,10 +327,10 @@ export function apply(ctx, config = {}) {
       required: ['query'],
     },
     output: OUT,
-    async execute(args) {
+    async execute(args, exec) {
       const r = recall({
         query: args.query,
-        search: (q) => ledger.search(q, { limit: 50 }),
+        search: (q) => ledger.search(q, { limit: 50, ...scopeFilter(exec?.agent?.id) }),
         budget: Number(args.budget ?? budget),
       });
       return {
@@ -355,7 +363,7 @@ export function apply(ctx, config = {}) {
       required: ['used'],
     },
     output: OUT,
-    async execute(args) {
+    async execute(args, exec = {}) {
       const ids = [...new Set([...(args.items ?? []), ...(args.used ?? [])])];
       const active = ledger.active();
       const items = ids
@@ -386,7 +394,7 @@ export function apply(ctx, config = {}) {
       properties: { apply: { type: 'boolean', description: 'true 才真的标 cold' } },
     },
     output: OUT,
-    async execute(args = {}) {
+    async execute(args = {}, exec = {}) {
       const r = sweep(ledger, { apply: args.apply === true });
       return { applied: r.applied, counts: r.counts, rows: r.rows.slice(0, 20) };
     },
@@ -823,7 +831,7 @@ export function apply(ctx, config = {}) {
       required: ['from', 'to'],
     },
     output: OUT,
-    async execute(args) {
+    async execute(args, exec = {}) {
       const a = ledger.get(args.from) ?? ledger.active().find((c) => c.id.startsWith(args.from));
       const b = ledger.get(args.to) ?? ledger.active().find((c) => c.id.startsWith(args.to));
       if (!a || !b) return { ok: false, reason: '端点不存在' };
@@ -845,7 +853,7 @@ export function apply(ctx, config = {}) {
       required: ['id'],
     },
     output: OUT,
-    async execute(args) {
+    async execute(args, exec = {}) {
       const c = ledger.get(args.id) ?? ledger.active().find((x) => x.id.startsWith(args.id));
       if (!c) return { ok: false, reason: '找不到这条记忆' };
       const rows = ledger.related(c.id, { depth: Number(args.depth ?? 1), type: args.type });
@@ -869,7 +877,7 @@ export function apply(ctx, config = {}) {
       required: ['text'],
     },
     output: OUT,
-    async execute(args) {
+    async execute(args, exec = {}) {
       const intent = detectIntent(args.text);
       const content = stripCue(args.text) || String(args.text ?? '');
       const kind = args.kind ?? intent.kind;
@@ -918,7 +926,7 @@ export function apply(ctx, config = {}) {
       required: ['title', 'body'],
     },
     output: OUT,
-    async execute(args) {
+    async execute(args, exec = {}) {
       const d = ledger.putDoc({ title: args.title, body: args.body, tags: args.tags ?? '' });
       chronicle.append(epoch, { doc: d.id, title: d.title, at: Date.now() });
       return { ok: true, id: d.id, title: d.title, chars: d.body.length };
@@ -937,7 +945,7 @@ export function apply(ctx, config = {}) {
       required: ['query'],
     },
     output: OUT,
-    async execute(args) {
+    async execute(args, exec = {}) {
       const hits = ledger.searchDocs(args.query, { limit: Number(args.limit ?? 5) });
       return {
         hits: hits.map((h) => ({ id: h.id, title: h.title, excerpt: h.body.slice(0, 160) })),
@@ -952,7 +960,7 @@ export function apply(ctx, config = {}) {
     description: '看这一轮被自动注入了什么（热记忆原文 + 统计），用来调 hotBytes 或验证注入是否生效。',
     parameters: { type: 'object', properties: {} },
     output: OUT,
-    async execute() {
+    async execute(args, exec = {}) {
       const hot = hotNow();
       return { injected: config.hot !== false, budgetBytes: hotBytes, bytes: hot.bytes, counts: hot.counts, omitted: hot.omitted, text: hot.text };
     },
@@ -973,7 +981,7 @@ export function apply(ctx, config = {}) {
       required: ['query'],
     },
     output: OUT,
-    async execute(args) {
+    async execute(args, exec = {}) {
       const q = String(args.query ?? '').trim();
       const limit = Number(args.limit ?? 10);
       if (!q) return { ok: false, reason: '给个关键词' };
@@ -1002,7 +1010,7 @@ export function apply(ctx, config = {}) {
     description: '插件自检：本宿主里 systemPrompt / webServer / commands 是否可用，以及注入与面板的挂载状态。',
     parameters: { type: 'object', properties: {} },
     output: OUT,
-    async execute() {
+    async execute(args, exec = {}) {
       const has = (name) => {
         try {
           const v = typeof ctx.get === 'function' ? ctx.get(name) : undefined;
@@ -1047,9 +1055,9 @@ export function apply(ctx, config = {}) {
       },
     },
     output: OUT,
-    async execute(args = {}) {
+    async execute(args = {}, exec = {}) {
       const limit = Number(args.limit ?? 5);
-      const active = ledger.active(args.kind);
+      const active = ledger.active(args.kind, scopeFilter(exec?.agent?.id));
       const groups = {};
       for (const c of active) {
         groups[c.kind] ??= { count: 0, titles: [] };
@@ -1066,8 +1074,8 @@ export function apply(ctx, config = {}) {
     description: 'LOOM 账本概况：条目数、按类型分布、数据库路径。',
     parameters: { type: 'object', properties: {} },
     output: OUT,
-    async execute() {
-      const active = ledger.active();
+    async execute(args, exec = {}) {
+      const active = ledger.active(undefined, scopeFilter(exec?.agent?.id));
       const byKind = {};
       for (const c of active) byKind[c.kind] = (byKind[c.kind] ?? 0) + 1;
       return { dbPath, total: active.length, byKind, render: policy, epoch };
@@ -1080,7 +1088,7 @@ export function apply(ctx, config = {}) {
     description: '校验 L0 哈希链：条目数、链是否连续、有没有被改写。',
     parameters: { type: 'object', properties: {} },
     output: OUT,
-    async execute() {
+    async execute(args, exec = {}) {
       const epochs = chronicle.epochs();
       const rows = epochs.map((e) => {
         if (e.destroyed) return { id: e.id, destroyed: true, events: 0, ok: true };
@@ -1109,7 +1117,7 @@ export function apply(ctx, config = {}) {
       required: ['id'],
     },
     output: OUT,
-    async execute(args) {
+    async execute(args, exec = {}) {
       const id = String(args.id ?? '').trim();
       const claim = ledger.get(id) ?? ledger.active().find((c) => c.id.startsWith(id));
       if (!claim) return { ok: false, reason: '找不到这条记忆' };

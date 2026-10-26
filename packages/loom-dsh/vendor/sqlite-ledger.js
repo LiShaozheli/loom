@@ -32,7 +32,8 @@ CREATE TABLE IF NOT EXISTS claim (
   salience REAL NOT NULL DEFAULT 1,
   use_count INTEGER NOT NULL DEFAULT 0,
   last_used_at INTEGER,
-  cold INTEGER NOT NULL DEFAULT 0
+  cold INTEGER NOT NULL DEFAULT 0,
+  session_id TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_claim_kind ON claim(kind, valid_to);
 CREATE INDEX IF NOT EXISTS idx_claim_time ON claim(valid_from, valid_to);
@@ -94,6 +95,16 @@ export class SqliteLedger {
   constructor(file = ':memory:') {
     this.db = new DatabaseSync(file);
     this.db.exec(DDL);
+
+    // 老库迁移：早期没有 session_id 列
+    const hasSessionColumn = this.db
+      .prepare("SELECT name FROM pragma_table_info('claim')")
+      .all()
+      .some((c) => c.name === 'session_id');
+    if (!hasSessionColumn) {
+      this.db.exec('ALTER TABLE claim ADD COLUMN session_id TEXT');
+    }
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_claim_session ON claim(session_id)');
   }
 
   close() {
@@ -108,8 +119,8 @@ export class SqliteLedger {
     const bg = bigrams(`${claim.aiw} ${claim.title} ${claim.body ?? ''}`);
     this.db
       .prepare(
-        `INSERT INTO claim (id,kind,body,aiw,bg,title,confidence,source_event,epoch_id,taint,valid_from,salience,use_count,cold)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+        `INSERT INTO claim (id,kind,body,aiw,bg,title,confidence,source_event,epoch_id,taint,valid_from,salience,use_count,cold,session_id)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
       )
       .run(
         claim.id,
@@ -125,7 +136,8 @@ export class SqliteLedger {
         claim.validFrom,
         claim.salience ?? 1,
         claim.useCount ?? 0,
-        claim.cold ? 1 : 0
+        claim.cold ? 1 : 0,
+        claim.sessionId ?? null
       );
     const rowid = this.db.prepare('SELECT rowid FROM claim WHERE id = ?').get(claim.id).rowid;
     this.db.prepare('INSERT INTO claim_fts (rowid, aiw, bg, title) VALUES (?,?,?,?)').run(rowid, claim.aiw, bg, claim.title);
@@ -155,13 +167,26 @@ export class SqliteLedger {
       useCount: row.use_count,
       lastUsedAt: row.last_used_at ?? undefined,
       cold: !!row.cold,
+      sessionId: row.session_id ?? null,
     };
   }
 
-  active(kind) {
-    const rows = kind
-      ? this.db.prepare('SELECT * FROM claim WHERE valid_to IS NULL AND kind = ?').all(kind)
-      : this.db.prepare('SELECT * FROM claim WHERE valid_to IS NULL').all();
+  /**
+   * @param {string} [kind]
+   * @param {{session?:string|null}} [opts] 传 session 时只返回「本会话 + 全局」的条目
+   */
+  active(kind, opts = {}) {
+    const where = ['valid_to IS NULL'];
+    const args = [];
+    if (kind) {
+      where.push('kind = ?');
+      args.push(kind);
+    }
+    if (opts.session) {
+      where.push('(session_id IS NULL OR session_id = ?)');
+      args.push(opts.session);
+    }
+    const rows = this.db.prepare(`SELECT * FROM claim WHERE ${where.join(' AND ')}`).all(...args);
     return rows.map((r) => this.#map(r));
   }
 
@@ -176,7 +201,7 @@ export class SqliteLedger {
   }
 
   /** bigram 关键词检索：多词之间是 OR（任一命中都进候选），由 bm25 排序 */
-  search(query, { limit = 10, kind } = {}) {
+  search(query, { limit = 10, kind, session } = {}) {
     const terms = contentBigrams(query).split(' ').filter(Boolean);
     if (!terms.length) return [];
 
@@ -195,7 +220,10 @@ export class SqliteLedger {
     const args = kind ? [match, kind, limit] : [match, limit];
     try {
       const rows = this.db.prepare(sql).all(...args);
-      if (rows.length) return rows.map((r) => this.#map(r));
+      if (rows.length) {
+        const mapped = rows.map((r) => this.#map(r));
+        return session ? mapped.filter((c) => !c.sessionId || c.sessionId === session) : mapped;
+      }
 
       // 零命中兜底：改用单字 OR。宁可多给几条让路由去排序，也不要直接空手。
       const uni = unigrams(query);
@@ -206,7 +234,7 @@ export class SqliteLedger {
       return this.db.prepare(sql).all(...uargs).map((r) => this.#map(r));
     } catch {
       // FTS 语法不容错：查询里带特殊字符时退化为子串匹配
-      return this.active(kind).filter((c) => `${c.aiw} ${c.title}`.includes(query)).slice(0, limit);
+      return this.active(kind, { session }).filter((c) => `${c.aiw} ${c.title}`.includes(query)).slice(0, limit);
     }
   }
 
