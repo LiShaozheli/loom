@@ -155,7 +155,7 @@ export function apply(ctx, config = {}) {
 
 
   /** 收下一条内容：文档一定留，claim 能过闸门才留 */
-  const saveCaptured = (text, kind) => {
+  const saveCaptured = (text, kind, sessionId) => {
     const content = String(text ?? '').trim();
     if (!content) return null;
     const doc = ledger.putDoc({ title: makeTitle(content, { max: 24 }), body: content, tags: kind });
@@ -167,7 +167,7 @@ export function apply(ctx, config = {}) {
       epochId: 'ep-live',
       ledger,
       title: makeTitle(content),
-      source: { eventId: '#对话' },
+      source: { eventId: sessionId ? `#会话:${String(sessionId).slice(0, 8)}` : '#对话' },
     });
     let claimId = null;
     if (r.ok) {
@@ -232,6 +232,7 @@ export function apply(ctx, config = {}) {
             len: text.length,
             at: event?.time ?? Date.now(),
             seq: event?.seq,
+            session: session?.id ?? null,
             key,
           });
 
@@ -241,7 +242,7 @@ export function apply(ctx, config = {}) {
             try {
               const pick = pickDurable(text, { level: autoCaptureLevel });
               if (pick.capture) {
-                const saved = saveCaptured(pick.text, pick.kind);
+                const saved = saveCaptured(pick.text, pick.kind, session?.id);
                 if (saved) hookLog(null, `captured ${pick.kind} ${saved.claimId ?? saved.docId}`);
               }
             } catch (err) {
