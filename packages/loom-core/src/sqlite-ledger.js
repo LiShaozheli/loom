@@ -52,6 +52,18 @@ CREATE TABLE IF NOT EXISTS external_ref (
 );
 CREATE INDEX IF NOT EXISTS idx_ext_status ON external_ref(status);
 
+-- 关系边：记忆之间不再是一堆孤立的句子
+CREATE TABLE IF NOT EXISTS edge (
+  from_id TEXT NOT NULL,
+  to_id TEXT NOT NULL,
+  type TEXT NOT NULL,
+  weight REAL NOT NULL DEFAULT 1,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (from_id, to_id, type)
+);
+CREATE INDEX IF NOT EXISTS idx_edge_from ON edge(from_id);
+CREATE INDEX IF NOT EXISTS idx_edge_to ON edge(to_id);
+
 -- 项目文档：长文，不受 AI文 的短断言限制
 CREATE TABLE IF NOT EXISTS doc (
   id TEXT PRIMARY KEY,
@@ -213,6 +225,53 @@ export class SqliteLedger {
 
   refsOf(claimId) {
     return this.db.prepare('SELECT * FROM external_ref WHERE claim_id = ?').all(claimId);
+  }
+
+
+  // ---------------- 关系边 ----------------
+
+  link(fromId, toId, { type = 'semantic', weight = 1, now = Date.now() } = {}) {
+    if (!fromId || !toId || fromId === toId) return null;
+    this.db
+      .prepare('INSERT OR REPLACE INTO edge (from_id,to_id,type,weight,created_at) VALUES (?,?,?,?,?)')
+      .run(fromId, toId, type, weight, now);
+    return { fromId, toId, type, weight };
+  }
+
+  edgesOf(id) {
+    return this.db
+      .prepare('SELECT * FROM edge WHERE from_id = ? OR to_id = ?')
+      .all(id, id)
+      .map((e) => ({
+        from: e.from_id,
+        to: e.to_id,
+        type: e.type,
+        weight: e.weight,
+        other: e.from_id === id ? e.to_id : e.from_id,
+      }));
+  }
+
+  /** 从一条记忆出发做 BFS，返回邻居与距离 */
+  related(id, { depth = 1, type } = {}) {
+    const seen = new Set([id]);
+    const out = [];
+    let frontier = [id];
+    for (let d = 1; d <= depth; d++) {
+      const next = [];
+      for (const cur of frontier) {
+        for (const e of this.edgesOf(cur)) {
+          if (type && e.type !== type) continue;
+          if (seen.has(e.other)) continue;
+          seen.add(e.other);
+          next.push(e.other);
+          const c = this.get(e.other);
+          out.push({ id: e.other, distance: d, type: e.type, title: c?.title ?? '', kind: c?.kind ?? null });
+        }
+      }
+      frontier = next;
+      if (!frontier.length) break;
+    }
+    return out;
   }
 
   // ---------------- 项目文档 ----------------

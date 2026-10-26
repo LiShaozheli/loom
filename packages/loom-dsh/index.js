@@ -257,6 +257,50 @@ export function apply(ctx, config = {}) {
     },
   });
 
+  // ---- 关系边 ----
+  ctx.tools.register({
+    name: 'memory_link',
+    description: '给两条记忆连一条边（temporal/semantic/causal/entity）。关系本身也是记忆。',
+    parameters: {
+      type: 'object',
+      properties: {
+        from: { type: 'string', description: '起点 id（可给前 8 位）' },
+        to: { type: 'string', description: '终点 id（可给前 8 位）' },
+        type: { type: 'string', description: 'temporal | semantic | causal | entity' },
+      },
+      required: ['from', 'to'],
+    },
+    output: OUT,
+    async execute(args) {
+      const a = ledger.get(args.from) ?? ledger.active().find((c) => c.id.startsWith(args.from));
+      const b = ledger.get(args.to) ?? ledger.active().find((c) => c.id.startsWith(args.to));
+      if (!a || !b) return { ok: false, reason: '端点不存在' };
+      const e = ledger.link(a.id, b.id, { type: args.type ?? 'semantic' });
+      return { ok: true, from: a.id.slice(0, 8), to: b.id.slice(0, 8), type: e.type };
+    },
+  });
+
+  ctx.tools.register({
+    name: 'memory_related',
+    description: '顺着边找相邻的记忆（BFS），返回距离与类型。',
+    parameters: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '起点 id（可给前 8 位）' },
+        depth: { type: 'number', description: '深度，默认 1' },
+        type: { type: 'string', description: '只看某类边' },
+      },
+      required: ['id'],
+    },
+    output: OUT,
+    async execute(args) {
+      const c = ledger.get(args.id) ?? ledger.active().find((x) => x.id.startsWith(args.id));
+      if (!c) return { ok: false, reason: '找不到这条记忆' };
+      const rows = ledger.related(c.id, { depth: Number(args.depth ?? 1), type: args.type });
+      return { ok: true, from: c.id.slice(0, 8), found: rows.length, related: rows };
+    },
+  });
+
   // ---- 原样捕获（不会拒绝） ----
   ctx.tools.register({
     name: 'memory_note',

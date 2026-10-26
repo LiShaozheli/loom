@@ -41,10 +41,10 @@ test('会话自测：14 轮真实用法', async (t) => {
   const { call, cleanups, names, sections } = boot(path.join(dir, 'loom.db'));
 
   try {
-    await t.test('0. 十一个工具都在，且注册了两段 prompt', () => {
+    await t.test('0. 十四个工具都在，且注册了两段 prompt', () => {
       assert.deepEqual(names.sort(), [
-        'memory_decay', 'memory_doc_search', 'memory_doc_write', 'memory_forget', 'memory_hot', 'memory_note',
-        'memory_outline', 'memory_recall', 'memory_settle', 'memory_stats', 'memory_verify', 'memory_write',
+        'memory_decay', 'memory_doc_search', 'memory_doc_write', 'memory_forget', 'memory_hot', 'memory_link', 'memory_note',
+        'memory_outline', 'memory_recall', 'memory_related', 'memory_settle', 'memory_stats', 'memory_verify', 'memory_write',
       ]);
       assert.deepEqual(sections.map((x) => x.name).sort(), ['loom-hot-memory', 'loom-memory-protocol']);
     });
@@ -183,7 +183,17 @@ test('会话自测：14 轮真实用法', async (t) => {
       assert.ok(s2.hits.length >= 1, '长文要能被检索到');
     });
 
-    await t.test('18. 热记忆：自动注入的内容里有规则，且受字节约束', async () => {
+    await t.test('18. 关系边：连上之后能顺着走', async () => {
+      const a = await call('memory_write', { line: '缓存层选型未定；先按 LRU 做。', kind: 'open' });
+      const b = await call('memory_write', { line: '压测发现 Redis 延迟抖动。', kind: 'fact' });
+      const l = await call('memory_link', { from: a.id.slice(0, 8), to: b.id.slice(0, 8), type: 'causal' });
+      assert.equal(l.ok, true);
+      const r = await call('memory_related', { id: a.id.slice(0, 8), depth: 1 });
+      assert.equal(r.found, 1);
+      assert.equal(r.related[0].type, 'causal');
+    });
+
+    await t.test('19. 热记忆：自动注入的内容里有规则，且受字节约束', async () => {
       const hot = await call('memory_hot', {});
       assert.equal(hot.injected, true);
       assert.ok(hot.bytes > 0);
