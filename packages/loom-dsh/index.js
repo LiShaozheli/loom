@@ -615,12 +615,12 @@ export function apply(ctx, config = {}) {
       const claim = ledger.get(id) ?? ledger.active().find((c) => c.id.startsWith(id));
       if (!claim) return { ok: false, reason: '找不到这条记忆' };
 
-      const tomb = { id: `tomb-${claim.id.slice(0, 8)}`, kind: claim.kind, body: '（已删除）', aiw: '（已删除）', title: '（已删除）', confidence: 'high', source: { eventId: '#forget' }, epochId: claim.epochId, taint: 'none', validFrom: Date.now(), salience: 0, useCount: 0, cold: true };
-      ledger.put(tomb);
-      ledger.supersede(claim.id, tomb.id, args.reason ?? '用户要求');
+      // 不要造墓碑条目：墓碑一旦入库就成了"正常记忆"，会出现在列表和计数里。
+      // 失效信息已经由 valid_to + supersede_log + L0 事件三处记录，足够回查。
+      ledger.supersede(claim.id, null, args.reason ?? '用户要求');
       chronicle.append(epoch, { forget: claim.id, reason: args.reason ?? '用户要求', at: Date.now() });
 
-      return { ok: true, id: claim.id.slice(0, 8), supersededBy: tomb.id.slice(0, 8) };
+      return { ok: true, id: claim.id.slice(0, 8), supersededBy: null };
     },
   });
 }

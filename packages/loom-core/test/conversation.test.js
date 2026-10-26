@@ -173,7 +173,19 @@ test('会话自测：14 轮真实用法', async (t) => {
       assert.equal(v.ok, true, '遗忘后链仍可验');
     });
 
-    await t.test('15. 遗忘扫描：默认只预览', async () => {
+    await t.test('15. 遗忘：不留墓碑条目，计数要减一', async () => {
+      const w = await call('memory_write', { line: '这是一条要被忘掉的记忆。', kind: 'fact' });
+      const before = (await call('memory_stats', {})).total;
+      const f2 = await call('memory_forget', { id: w.id.slice(0, 8), reason: '测试' });
+      assert.equal(f2.ok, true);
+      const after = (await call('memory_stats', {})).total;
+      assert.equal(after, before - 1, '删掉就不该再算一条');
+      const outline = await call('memory_outline', {});
+      const titles = JSON.stringify(outline.groups);
+      assert.equal(titles.includes('（已删除）'), false, '墓碑不该出现在列表里');
+    });
+
+    await t.test('15b. 遗忘扫描：默认只预览', async () => {
       const r = await call('memory_decay', {});
       assert.equal(r.applied, false);
       assert.ok(r.counts.keep >= 1);
