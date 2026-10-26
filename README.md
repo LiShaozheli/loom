@@ -1,4 +1,4 @@
-# LOOM
+﻿# LOOM
 
 > 分层记忆：**AI文 做证据、题档 做路标、哈希链保证可验、epoch 加密保证可删。**
 
@@ -171,6 +171,7 @@ npm run settle            # 归因实测：引用 vs 词面
 | `memory_write` | 写入一条 AI文（尾部可省；来源默认记「会话」） |
 | `memory_recall` | 按问题取回证据，附带可直接注入的 `rendered` 文本 |
 | `memory_outline` | 先看目录：按类型分组 + 标题，适合"不确定记过什么" |
+| `memory_hot` | 看这一轮自动注入了什么（调 `hotBytes` 时用） |
 | `memory_settle` | 结账：哪些被用到、对不对 → 改权重 |
 | `memory_decay` | 遗忘扫描（默认预览，`apply` 才标冷） |
 | `memory_verify` | 校验 L0 哈希链：条目数、链是否连续 |
@@ -179,6 +180,9 @@ npm run settle            # 归因实测：引用 vs 词面
 
 写入路径已经接上 **L0 编年层**：每次成功写入都会追加到哈希链，
 `memory_verify` 随时可验"记忆没被改写"。
+
+**每轮自动注入**：规则与偏好全进、事实只进最近几条，总量受 `hotBytes` 约束；
+另有一段使用协议告诉模型何时该写、该查。注入失败不影响工具（有兜底）。
 
 ```bash
 node tools/plugin-smoke.mjs    # 给 apply() 一个假 ctx，验证工具契约
