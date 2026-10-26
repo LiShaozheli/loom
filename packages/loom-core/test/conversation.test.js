@@ -43,7 +43,7 @@ test('会话自测：14 轮真实用法', async (t) => {
   try {
     await t.test('0. 十一个工具都在，且注册了两段 prompt', () => {
       assert.deepEqual(names.sort(), [
-        'memory_decay', 'memory_doc_search', 'memory_doc_write', 'memory_forget', 'memory_hot',
+        'memory_decay', 'memory_doc_search', 'memory_doc_write', 'memory_forget', 'memory_hot', 'memory_note',
         'memory_outline', 'memory_recall', 'memory_settle', 'memory_stats', 'memory_verify', 'memory_write',
       ]);
       assert.deepEqual(sections.map((x) => x.name).sort(), ['loom-hot-memory', 'loom-memory-protocol']);
@@ -171,7 +171,19 @@ test('会话自测：14 轮真实用法', async (t) => {
       assert.ok(s2.hits.some((h) => h.title === '发布流程'), JSON.stringify(s2));
     });
 
-    await t.test('17. 热记忆：自动注入的内容里有规则，且受字节约束', async () => {
+    await t.test('17. 原样捕获：长文也留得住，只是不进 claim', async () => {
+      const long = '记住，发布流程是' + '先灰度再全量、观察三十分钟。'.repeat(10);
+      const n = await call('memory_note', { text: long });
+      assert.equal(n.ok, true);
+      assert.ok(n.docId, '文档必须留下');
+      assert.equal(n.claimId, null, '太长不该进 claim');
+      assert.equal(n.rejected, 'REJECT');
+
+      const s2 = await call('memory_doc_search', { query: '灰度' });
+      assert.ok(s2.hits.length >= 1, '长文要能被检索到');
+    });
+
+    await t.test('18. 热记忆：自动注入的内容里有规则，且受字节约束', async () => {
       const hot = await call('memory_hot', {});
       assert.equal(hot.injected, true);
       assert.ok(hot.bytes > 0);

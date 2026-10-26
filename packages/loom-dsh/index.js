@@ -18,6 +18,7 @@ import { settleTurn } from './vendor/settle.js';
 import { sweep } from './vendor/decay.js';
 import { buildHotMemory } from './vendor/hot.js';
 import { resolveDbPath } from './vendor/paths.js';
+import { detectIntent, stripCue } from './vendor/capture.js';
 import { Chronicle } from './vendor/chronicle.js';
 import { SqliteLedger } from './vendor/sqlite-ledger.js';
 
@@ -36,7 +37,7 @@ const DEFAULT_HOT_BYTES = 2048;
 /** 使用协议：把"什么时候该写、该查"讲清楚，比让模型自己猜便宜得多 */
 const PROTOCOL = [
   '## LOOM 记忆规则',
-  '- 用户说「记住 / 记一下 / 记着」→ 立刻调 memory_write；一行一个断言，句末用 。',
+  '- 用户说「记住 / 记一下 / 记着」→ 调 memory_note（原样收下，不会被拒）；要精确格式再用 memory_write。',
   '- 问到过去的事（上次 / 之前 / 我们说 / 当时）→ 先 memory_recall 再回答，不要凭印象。',
   '- 回答里用到记忆时，在末尾标 [#id]；事后可用 memory_settle 结算。',
   '- 不确定有没有记过 → 先 memory_outline 看目录。',
@@ -225,6 +226,57 @@ export function apply(ctx, config = {}) {
     async execute(args = {}) {
       const r = sweep(ledger, { apply: args.apply === true });
       return { applied: r.applied, counts: r.counts, rows: r.rows.slice(0, 20) };
+    },
+  });
+
+  // ---- 原样捕获（不会拒绝） ----
+  ctx.tools.register({
+    name: 'memory_note',
+    description:
+      '把用户一句话原样收下：先存成文档，短的话再顺手提炼成一条记忆。' +
+      '与 memory_write 的区别是它**不会拒绝**——格式不对、太长都只是不进 claim，文档一定留下。',
+    parameters: {
+      type: 'object',
+      properties: {
+        text: { type: 'string', description: '用户原话，可以带「记住」这类指令词' },
+        kind: { type: 'string', description: '强制指定类型，省略则按内容猜' },
+        title: { type: 'string', description: '文档标题，省略取前 16 字' },
+      },
+      required: ['text'],
+    },
+    output: OUT,
+    async execute(args) {
+      const intent = detectIntent(args.text);
+      const content = stripCue(args.text) || String(args.text ?? '');
+      const kind = args.kind ?? intent.kind;
+
+      const doc = ledger.putDoc({
+        title: args.title ?? content.slice(0, 16),
+        body: content,
+        tags: kind,
+      });
+      chronicle.append(epoch, { doc: doc.id, title: doc.title, at: Date.now() });
+
+      let claimId = null;
+      let rejected = null;
+      const r = ingest({
+        line: content,
+        body: content,
+        kind,
+        epochId: 'ep-live',
+        ledger,
+        title: content.slice(0, 12),
+        source: { eventId: '#会话' },
+      });
+      if (r.ok) {
+        claimId = r.claim.id;
+        epoch = chronicle.currentEpoch({ everyDays: epochDays });
+        chronicle.append(epoch, { claimId, kind, aiw: r.claim.aiw, at: Date.now() });
+      } else {
+        rejected = r.gate.verdict;
+      }
+
+      return { ok: true, docId: doc.id, claimId: claimId ? claimId.slice(0, 8) : null, kind, due: intent.due, rejected };
     },
   });
 
