@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: 版本信息
+        run: |
+          node --version
+          npm --version
+
+      # 零依赖：不需要 npm ci
+      - name: 单元测试
+        run: npm test
+
+      - name: 工程门禁
+        run: npm run verify
+
+      - name: 端到端演示
+        run: npm run demo
+
+  quality:
+    name: 检索质量
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # 离线、确定性；阈值守住"别把检索改坏"
+      - name: 200 题评测（recall@1 ≥ 60%）
+        run: node tools/quality-gate.mjs --min 60
+
+      - name: 三问第一问的收益核算
+        run: npm run admission
+
+  package:
+    name: 打包检查
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: 内核包
+        run: npm pack --dry-run
+
+      - name: 插件包
+        working-directory: packages/loom-dsh
+        run: npm pack --dry-run
