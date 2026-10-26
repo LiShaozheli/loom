@@ -186,26 +186,37 @@ export function identifiers(text) {
   };
   return [...new Set(parts.filter((s) => s.length >= 2 && looksLikeId(s)))];
 }
-/** 把中文切成 bigram；拉丁/数字整段保留，不切碎（「Kubernetes」切出的 er 会撞上「docker」） */
+/** 把中文切成 bigram；拉丁/数字整段保留。
+ *  必须先按文字系统切开：「报ENOENT」若整段处理会切出 报e/en/no，中文那半边就丢了。 */
 export function bigrams(text) {
-  const raw = String(text ?? '');
-  const cleaned = raw.replace(/[^\p{Script=Han}A-Za-z0-9]+/gu, ' ').trim();
+  const raw = String(text ?? "");
   const out = new Set();
-  for (const seg of cleaned.split(/\s+/)) {
-    if (!seg) continue;
-    if (/^[A-Za-z0-9]+$/.test(seg)) {
-      out.add(seg.toLowerCase());
-      continue;
-    }
-    const ch = [...seg];
+  for (const run of raw.matchAll(/[\p{Script=Han}]+/gu)) {
+    const ch = [...run[0]];
     if (ch.length === 1) out.add(ch[0]);
     for (let i = 0; i < ch.length - 1; i++) out.add(ch[i] + ch[i + 1]);
   }
-  // 嵌在中文里的拉丁串（在1Password）也要整段保留
   for (const m of raw.matchAll(/[A-Za-z0-9][A-Za-z0-9_.:-]*/g)) out.add(m[0].toLowerCase());
-  return [...out].join(' ');
+  return [...out].join(" ");
 }
+
+/** 疑问词与虚词：查询里它们只会稀释分母，检索前先去掉 */
+const QUERY_STOP = /是多少|是什么|什么样|什么|怎么样|怎么|为什么|如何|是不是|能不能|有没有|哪个|哪些|多少|吗|呢|的|了|吧|啊|[?？!！,，。；;]/g;
+
+/** 查询用 bigram：先去掉疑问词再切，避免「报的是什么错」被切成 报的/的是/是什/什么/么错 */
+export function contentBigrams(text) {
+  const cleaned = String(text ?? "").replace(QUERY_STOP, " ");
+  return bigrams(cleaned);
+}
+
 /** 内容指纹：忽略标点与空白，用于去重（「；」和「，」不算两条记忆） */
 export function contentKey(text) {
   return String(text ?? '').normalize('NFKC').toLowerCase().replace(/[^\p{Script=Han}A-Za-z0-9]/gu, '');
+}
+/** 单字集合：只在 bigram 一条都搜不到时兜底——「修好的」和「修复」共享一个 修 */
+export function unigrams(text) {
+  const s = String(text ?? "").replace(QUERY_STOP, " ");
+  const out = new Set();
+  for (const run of s.matchAll(/[\p{Script=Han}]+/gu)) for (const ch of run[0]) out.add(ch);
+  return [...out];
 }

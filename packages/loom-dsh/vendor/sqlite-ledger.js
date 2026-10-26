@@ -1,4 +1,4 @@
-﻿/**
+/**
  * L1 账本：SQLite + FTS5 bigram。
  *
  * 为什么不是默认分词器：unicode61 把「用户彻底怒了」当一个词，搜「彻底」命中 0；
@@ -8,7 +8,7 @@
 
 import { DatabaseSync } from 'node:sqlite';
 import { createHash } from 'node:crypto';
-import { bigrams } from './aiw.js';
+import { bigrams, contentBigrams, unigrams } from './aiw.js';
 export { bigrams };
 
 
@@ -83,7 +83,8 @@ export class SqliteLedger {
     const existing = this.get(claim.id);
     if (existing) return existing;
 
-    const bg = bigrams(`${claim.aiw} ${claim.title}`);
+    // 原文也进索引：AI文 会压掉「报」「说」这类词，只索引压缩文本会漏掉自然问法
+    const bg = bigrams(`${claim.aiw} ${claim.title} ${claim.body ?? ''}`);
     this.db
       .prepare(
         `INSERT INTO claim (id,kind,body,aiw,bg,title,confidence,source_event,epoch_id,taint,valid_from,salience,use_count,cold)
@@ -155,7 +156,7 @@ export class SqliteLedger {
 
   /** bigram 关键词检索：多词之间是 OR（任一命中都进候选），由 bm25 排序 */
   search(query, { limit = 10, kind } = {}) {
-    const terms = bigrams(query).split(' ').filter(Boolean);
+    const terms = contentBigrams(query).split(' ').filter(Boolean);
     if (!terms.length) return [];
 
     // FTS5 的裸空格是 AND：用「是多少」这种问句会一条都搜不到。
@@ -172,7 +173,16 @@ export class SqliteLedger {
          ORDER BY bm25(claim_fts) LIMIT ?`;
     const args = kind ? [match, kind, limit] : [match, limit];
     try {
-      return this.db.prepare(sql).all(...args).map((r) => this.#map(r));
+      const rows = this.db.prepare(sql).all(...args);
+      if (rows.length) return rows.map((r) => this.#map(r));
+
+      // 零命中兜底：改用单字 OR。宁可多给几条让路由去排序，也不要直接空手。
+      const uni = unigrams(query);
+      if (!uni.length) return [];
+      const uexpr = uni.map((t) => `"${t}"`).join(' OR ');
+      const umatch = `bg:(${uexpr}) OR title:(${uexpr})`;
+      const uargs = kind ? [umatch, kind, limit] : [umatch, limit];
+      return this.db.prepare(sql).all(...uargs).map((r) => this.#map(r));
     } catch {
       // FTS 语法不容错：查询里带特殊字符时退化为子串匹配
       return this.active(kind).filter((c) => `${c.aiw} ${c.title}`.includes(query)).slice(0, limit);
@@ -230,7 +240,7 @@ export class SqliteLedger {
 
   /** 文档检索：与 claim 同一套 bigram + OR + bm25 */
   searchDocs(query, { limit = 5 } = {}) {
-    const terms = bigrams(query).split(' ').filter(Boolean);
+    const terms = contentBigrams(query).split(' ').filter(Boolean);
     if (!terms.length) return [];
     const expr = terms.map((t) => `"${t.replace(/"/g, '')}"`).join(' OR ');
     const match = `bg:(${expr}) OR title:(${expr})`;

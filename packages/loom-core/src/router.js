@@ -5,7 +5,7 @@
  * 只用类型不给词面分，会遇到"问的是环境，但条目 kind 叫 env"这种漏召回。
  */
 
-import { identifiers, bigrams, contentBigrams } from './aiw.js';
+import { identifiers, bigrams, contentBigrams, unigrams } from './aiw.js';
 
 const KIND_HINTS = [
   ['pref', /喜欢|偏好|习惯|不喜欢|倾向|希望/],
@@ -76,11 +76,23 @@ export function scoreClaim(claim, route) {
     ? route.entities.filter((e) => text.toLowerCase().includes(e.toLowerCase())).length / route.entities.length
     : 0;
 
-  // 只「类型相同」不算相关：否则问一句 Kubernetes，所有 fact 条目都会被召回。
-  if (lex === 0 && entHits === 0) return 0;
+  const uni = unigramScore(route.query ?? '', text);
 
-  let score = 0.5 * lex + entHits * 0.5;
+  // 只「类型相同」不算相关：否则问一句 Kubernetes，所有 fact 条目都会被召回。
+  if (lex === 0 && entHits === 0 && uni === 0) return 0;
+
+  let score = 0.5 * lex + entHits * 0.5 + 0.15 * uni;
   if (route.kinds.includes(claim.kind)) score += 0.2;
   if (route.since && claim.validFrom >= route.since) score += 0.1;
   return score;
+}
+
+/** 单字重合度：bigram 全落空时的兜底信号，权重必须低于词面 */
+function unigramScore(query, text) {
+  const q = unigrams(query);
+  if (!q.length) return 0;
+  const t = new Set(unigrams(text));
+  let hit = 0;
+  for (const ch of q) if (t.has(ch)) hit++;
+  return hit / q.length;
 }

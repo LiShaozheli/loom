@@ -213,3 +213,10 @@ export function contentBigrams(text) {
 export function contentKey(text) {
   return String(text ?? '').normalize('NFKC').toLowerCase().replace(/[^\p{Script=Han}A-Za-z0-9]/gu, '');
 }
+/** 单字集合：只在 bigram 一条都搜不到时兜底——「修好的」和「修复」共享一个 修 */
+export function unigrams(text) {
+  const s = String(text ?? "").replace(QUERY_STOP, " ");
+  const out = new Set();
+  for (const run of s.matchAll(/[\p{Script=Han}]+/gu)) for (const ch of run[0]) out.add(ch);
+  return [...out];
+}
