@@ -273,6 +273,60 @@ export function apply(ctx, config = {}) {
   });
 
 
+
+  // ---- 面板数据路由：/loom/state ----
+  // Client 侧取数据不能靠猜 RPC 契约；用宿主自己的 HTTP 路由最直接。
+  ctx.effect(() => {
+    let dispose = () => {};
+    try {
+      const web = typeof ctx.get === 'function' ? ctx.get('webServer') : undefined;
+      if (web?.register) {
+        dispose = web.register({
+          kind: 'exact',
+          path: '/loom/state',
+          handler: async (req, res) => {
+            try {
+              const active = ledger.active();
+              const byKind = {};
+              for (const c of active) byKind[c.kind] = (byKind[c.kind] ?? 0) + 1;
+              const rows = chronicle.epochs().map((e) => {
+                if (e.destroyed) return { ok: true, events: 0 };
+                const v = chronicle.verify(e.id);
+                let n = 0;
+                try { n = chronicle.read(e.id).length; } catch { n = 0; }
+                return { ok: v.ok, events: n };
+              });
+              const hot = hotNow();
+              const body = JSON.stringify({
+                total: active.length,
+                byKind,
+                epoch,
+                hot: { bytes: hot.bytes, rule: hot.counts.rule, pref: hot.counts.pref, fact: hot.counts.fact },
+                verify: {
+                  ok: rows.every((r) => r.ok),
+                  events: rows.reduce((n, r) => n + r.events, 0),
+                },
+                items: active
+                  .slice()
+                  .sort((a, b) => (b.validFrom ?? 0) - (a.validFrom ?? 0))
+                  .slice(0, 50)
+                  .map((c) => ({ id: c.id.slice(0, 8), kind: c.kind, aiw: c.aiw })),
+              });
+              res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
+              res.end(body);
+            } catch (e) {
+              res.writeHead(500, { 'content-type': 'application/json' });
+              res.end(JSON.stringify({ error: e.message }));
+            }
+          },
+        });
+      }
+    } catch {
+      // 没有 webServer 就不提供面板数据，工具照常可用
+    }
+    return dispose;
+  });
+
   // ---- 斜杠命令：不开界面也能查 ----
   ctx.effect(() => {
     let dispose = () => {};

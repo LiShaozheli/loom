@@ -39,7 +39,7 @@
 | 图谱（link/related） | ✅ | `edge` 表 + `memory_link` / `memory_related`，支持四类边与 BFS |
 | 语义召回 | ❌ | 纯词面 |
 | 技能自进化 | ❌ | 不做，也不打算做 |
-| 侧边栏面板 | ❌ | 契约已查明（见下），缺宿主↔前端数据通道 |
+| 侧边栏面板 | ✅ | `sidebar.panellist` 图标 + `main[key=loom]` 面板 + `/loom/state` 数据路由 |
 | 设置页 | ❌ | 没有 `Config`（见下） |
 | 自动写入 | 🟡 部分 | `memory_note` 原样捕获（不拒绝，长文进文档）+ 协议提示；真正的「不靠模型自觉」还没做 |
 
@@ -96,9 +96,15 @@
 4. Client 侧不用打包，直接写 `window.__ModuleLoader__.load({ id, factory(require) })`，
    `require('react')` 由宿主提供
 
-**还缺一环**：前端拿数据要 `host.call(method, args)`（Pakcage-private JSON RPC），
-但 Host 侧如何注册这些方法还没查明——所以这一版**没有**发 Client 半，
-避免"点了图标就抛错"这种坏体验。
+**数据通道**：没走 `host.call`（Host 侧注册方式没查到），改用宿主自己的 HTTP 路由
+`webServer.register({ kind: 'exact', path: '/loom/state' })` + 前端 `fetch`。
+这条路是文档化的，不依赖猜测。
+
+**已实现**：
+- 图标注册进 `sidebar.panellist`（id `loom`，order 40）
+- 面板注册进 `main`（key `loom`）——两边 id 必须一致，缺一边选中时会抛错
+- 面板内容：总数、按类型分布、本轮注入字节、最近 50 条、哈希链状态、刷新按钮
+- Client 半的契约有单测（ModuleLoader 格式、slot 名、id/key 一致、组件可渲染）
 
 ## 五、什么时候可以关掉 mnemon
 
