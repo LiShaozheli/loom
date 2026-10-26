@@ -468,6 +468,18 @@ export function apply(ctx, config = {}) {
   };
 
   const mountPanelData = (scope) => {
+    // 跨源 POST 会先发预检；allow-headers 少一个 content-type，浏览器就直接拒绝。
+    const CORS_JSON = {
+      'access-control-allow-origin': '*',
+      'content-type': 'application/json; charset=utf-8',
+      'cache-control': 'no-store',
+    };
+    const CORS_PREFLIGHT = {
+      'access-control-allow-origin': '*',
+      'access-control-allow-methods': 'POST, OPTIONS',
+      'access-control-allow-headers': 'content-type',
+      'access-control-max-age': '600',
+    };
     // Cordis 的服务代理对未 inject 的属性访问会抛错，所以每条路都单独兜
     let web;
     try { web = scope?.webServer; } catch { web = undefined; }
@@ -480,9 +492,9 @@ export function apply(ctx, config = {}) {
       kind: 'exact',
       path: '/loom/config',
       handler: async (req, res) => {
-        const cors = { 'access-control-allow-origin': '*', 'content-type': 'application/json; charset=utf-8' };
+        const cors = CORS_JSON;
         if (req?.method === 'OPTIONS') {
-          res.writeHead(204, { ...cors, 'access-control-allow-methods': 'POST, OPTIONS', 'access-control-max-age': '600' });
+          res.writeHead(204, CORS_PREFLIGHT);
           res.end();
           return;
         }
@@ -527,9 +539,9 @@ export function apply(ctx, config = {}) {
       kind: 'exact',
       path: '/loom/forget',
       handler: async (req, res) => {
-        const cors = { 'access-control-allow-origin': '*', 'content-type': 'application/json; charset=utf-8' };
+        const cors = CORS_JSON;
         if (req?.method === 'OPTIONS') {
-          res.writeHead(204, { ...cors, 'access-control-allow-methods': 'POST, OPTIONS' });
+          res.writeHead(204, CORS_PREFLIGHT);
           res.end();
           return;
         }
@@ -553,9 +565,9 @@ export function apply(ctx, config = {}) {
       kind: 'exact',
       path: '/loom/doc-save',
       handler: async (req, res) => {
-        const cors = { 'access-control-allow-origin': '*', 'content-type': 'application/json; charset=utf-8' };
+        const cors = CORS_JSON;
         if (req?.method === 'OPTIONS') {
-          res.writeHead(204, { ...cors, 'access-control-allow-methods': 'POST, OPTIONS' });
+          res.writeHead(204, CORS_PREFLIGHT);
           res.end();
           return;
         }
@@ -579,9 +591,9 @@ export function apply(ctx, config = {}) {
       kind: 'exact',
       path: '/loom/import',
       handler: async (req, res) => {
-        const cors = { 'access-control-allow-origin': '*', 'content-type': 'application/json; charset=utf-8' };
+        const cors = CORS_JSON;
         if (req?.method === 'OPTIONS') {
-          res.writeHead(204, { ...cors, 'access-control-allow-methods': 'POST, OPTIONS' });
+          res.writeHead(204, CORS_PREFLIGHT);
           res.end();
           return;
         }
@@ -602,7 +614,7 @@ export function apply(ctx, config = {}) {
       kind: 'exact',
       path: '/loom/doc',
       handler: async (req, res) => {
-        const cors = { 'access-control-allow-origin': '*', 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' };
+        const cors = CORS_JSON;
         try {
           const url = new URL(req?.url ?? '/', 'http://localhost');
           const id = String(url.searchParams.get('id') ?? '').trim();
@@ -662,7 +674,7 @@ export function apply(ctx, config = {}) {
       kind: 'exact',
       path: '/loom/archive',
       handler: async (req, res) => {
-        const cors = { 'access-control-allow-origin': '*', 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' };
+        const cors = CORS_JSON;
         try {
           const url = new URL(req?.url ?? '/', 'http://localhost');
           const q = String(url.searchParams.get('q') ?? '').trim();
