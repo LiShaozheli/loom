@@ -180,7 +180,7 @@ window.__ModuleLoader__.load({
         if (!base) return;
         const text = String(word ?? '').trim();
         if (!text) { setHits(null); return; }
-        fetch(base + '/loom/archive?q=' + encodeURIComponent(text), { credentials: 'omit' })
+        fetch(base + '/loom/archive?roles=user,assistant&q=' + encodeURIComponent(text), { credentials: 'omit' })
           .then((r) => r.json())
           .then((r) => setHits(r.hits || []))
           .catch(() => setHits([]));
@@ -357,6 +357,16 @@ window.__ModuleLoader__.load({
               onChange: (e) => setDraft({ ...draft, [key]: e.target.value }),
             }),
             h('button', { type: 'button', style: C.btn, onClick: () => save(key, draft[key] != null ? draft[key] : cfg[key]) }, '保存'))),
+          h('div', { style: C.row },
+            h('span', { style: C.label }, '库文件路径（留空=默认）'),
+            h('input', {
+              style: { ...C.input, width: 200 },
+              placeholder: 'D:\\loom\\loom.db',
+              value: draft.dbPath != null ? draft.dbPath : '',
+              onChange: (e) => setDraft({ ...draft, dbPath: e.target.value }),
+            }),
+            h('button', { type: 'button', style: C.btn, onClick: () => save('dbPath', draft.dbPath || '') }, '保存')),
+          h('div', { style: C.meta }, '换路径 = 换一个库（旧数据不会自动搬过去）；重启后生效。想搬数据用「下载记忆包」再「导入」。'),
           NUMS.map(([key, label]) => h('div', { key, style: C.row },
             h('span', { style: C.label }, label),
             h('input', {

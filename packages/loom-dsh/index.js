@@ -107,7 +107,7 @@ export function apply(ctx, config = {}) {
 
   /** 面板允许改的配置键（白名单，避免任意写配置） */
   const SETTABLE = new Set([
-    'budget', 'hot', 'hotBytes', 'protocol', 'autoCapture', 'autoCaptureLevel', 'epochDays', 'render', 'scope',
+    'budget', 'hot', 'hotBytes', 'protocol', 'autoCapture', 'autoCaptureLevel', 'epochDays', 'render', 'scope', 'dbPath',
   ]);
 
   // Cordis 的服务代理对未声明 inject 的属性访问会抛错（?. 挡不住），
@@ -434,7 +434,7 @@ export function apply(ctx, config = {}) {
         try {
           return chronicle
             .read(epoch)
-            .filter((ev) => ev?.event?.kind === 'msg')
+            .filter((ev) => ev?.event?.kind === 'msg' && ev.event.role !== 'tool')
             .slice(-30)
             .map((ev) => ({ role: ev.event.role, text: String(ev.event.text ?? '').slice(0, 240), at: ev.event.at }))
             .reverse();
@@ -509,6 +509,12 @@ export function apply(ctx, config = {}) {
           if (!entry) return reply(404, { ok: false, error: '找不到 loom-memory 这一行配置' });
 
           const value = body.value;
+          // 库路径只接受空串或绝对路径：相对路径会随 cwd 漂移，换一个 cwd 就换一个库
+          if (key === 'dbPath') {
+            const v = String(value ?? '').trim();
+            const absolute = v === '' || /^[A-Za-z]:[\\/]/.test(v) || v.startsWith('/');
+            if (!absolute) return reply(400, { ok: false, error: 'dbPath 必须是绝对路径（或留空用默认）' });
+          }
           await editor.edit(entry, (current) => ({ ...current, [key]: value }));
           return reply(200, { ok: true, key, value, note: '已保存；部分设置需要重启或刷新页面生效' });
         } catch (e) {
@@ -668,6 +674,9 @@ export function apply(ctx, config = {}) {
           const url = new URL(req?.url ?? '/', 'http://localhost');
           const q = String(url.searchParams.get('q') ?? '').trim();
           const limit = Math.min(Number(url.searchParams.get('limit') ?? 50), 200);
+          // 默认只看对话（user/assistant）；要工具输出显式传 roles=user,assistant,tool
+          const rolesParam = String(url.searchParams.get('roles') ?? 'user,assistant');
+          const roles = new Set(rolesParam.split(',').map((r) => r.trim()).filter(Boolean));
           const hits = [];
           for (const e of chronicle.epochs()) {
             if (e.destroyed) continue;
@@ -676,6 +685,7 @@ export function apply(ctx, config = {}) {
             for (const ev of events) {
               const m = ev?.event;
               if (m?.kind !== 'msg') continue;
+              if (roles.size && !roles.has(m.role)) continue;
               if (q && !String(m.text ?? '').includes(q)) continue;
               hits.push({ role: m.role, text: String(m.text ?? '').slice(0, 500), at: m.at });
               if (hits.length >= limit) break;
