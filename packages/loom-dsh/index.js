@@ -1,4 +1,4 @@
-﻿/**
+/**
  * LOOM 的 DSH 插件壳。
  *
  * 两块能力：
@@ -192,9 +192,11 @@ export function apply(ctx, config = {}) {
   // ---- 原文归档（正式通道）：session/event ----
   // agent/pre-step 只带用户消息，且是 waterfall；session/event 是提交后的追加流，
   // user / assistant / tool 全在，这才是"一条都不丢"的地方。
-  const hookLog = (err) => {
+  const hookLog = (err, note) => {
+    if (!err && !note) return;
     try {
-      fs.appendFileSync(path.join(path.dirname(dbPath), 'hook-errors.log'), `${new Date().toISOString()} ${err?.stack ?? err}\n`);
+      const line = err ? String(err?.stack ?? err) : String(note);
+      fs.appendFileSync(path.join(path.dirname(dbPath), 'hook-errors.log'), `${new Date().toISOString()} ${line}\n`);
     } catch {}
   };
 
@@ -232,6 +234,20 @@ export function apply(ctx, config = {}) {
             seq: event?.seq,
             key,
           });
+
+          // 自动捕获也挂在这里：pre-step 那条路在真实宿主里没触发过，
+          // 而 session/event 是确定会来的（归档一直是好的）。
+          if (role === 'user' && config.autoCapture !== false) {
+            try {
+              const pick = pickDurable(text, { level: autoCaptureLevel });
+              if (pick.capture) {
+                const saved = saveCaptured(pick.text, pick.kind);
+                if (saved) hookLog(null, `captured ${pick.kind} ${saved.claimId ?? saved.docId}`);
+              }
+            } catch (err) {
+              hookLog(err);
+            }
+          }
         } catch (err) {
           hookLog(err);
         }
@@ -239,34 +255,6 @@ export function apply(ctx, config = {}) {
     }
   } catch (err) {
     hookLog(err);
-  }
-
-  // ---- 自动捕获：每轮从用户输入里挑值得记的 ----
-  // 保守规则，不调模型；宁可漏，不可脏。
-  if (config.autoCapture !== false) {
-    try {
-      if (typeof ctx.on === 'function') {
-        ctx.on('agent/pre-step', (decision, next) => {
-          try {
-            const msgs = decision?.messages ?? [];
-            // 原文归档由 session/event 负责；这里只抽可检索的视图
-            const lastUser = [...msgs].reverse().find((m) => m?.role === 'user');
-            const text = typeof lastUser?.content === 'string'
-              ? lastUser.content
-              : Array.isArray(lastUser?.content)
-                ? lastUser.content.map((b) => (typeof b?.text === 'string' ? b.text : '')).join(' ')
-                : '';
-            const pick = pickDurable(text, { level: autoCaptureLevel });
-            if (pick.capture) saveCaptured(pick.text, pick.kind);
-          } catch {
-            // 捕获失败绝不能影响这一轮
-          }
-          return typeof next === 'function' ? next() : undefined;
-        });
-      }
-    } catch {
-      // 没有 pre-step 事件就不自动捕获，工具照常
-    }
   }
 
   // ---- 写 ----
