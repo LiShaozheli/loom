@@ -1,11 +1,11 @@
-/**
+﻿/**
  * 第二问：查哪类？
  *
  * 先按意图选池子（偏好问题去 pref 池），再用实体和词面重合度排序。
  * 只用类型不给词面分，会遇到"问的是环境，但条目 kind 叫 env"这种漏召回。
  */
 
-import { identifiers, bigrams } from './aiw.js';
+import { identifiers, bigrams, contentBigrams } from './aiw.js';
 
 const KIND_HINTS = [
   ['pref', /喜欢|偏好|习惯|不喜欢|倾向|希望/],
@@ -57,7 +57,7 @@ export function routeQuery(query, opts = {}) {
 
 /** 词面重合度：去掉疑问词后再切 bigram，避免"是多少"把分母撑大 */
 export function lexicalScore(query, text) {
-  const q = new Set(bigrams(String(query).replace(STOP, ' ')).split(' ').filter(Boolean));
+  const q = new Set(contentBigrams(query).split(' ').filter(Boolean));
   if (!q.size) return 0;
   const t = new Set(bigrams(String(text)).split(' ').filter(Boolean));
   let hit = 0;

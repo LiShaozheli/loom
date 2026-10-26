@@ -33,7 +33,7 @@ if (!dry) {
 }
 
 const db = new DatabaseSync(dbPath);
-const rows = db.prepare('SELECT rowid, id, aiw, title FROM claim').all();
+const rows = db.prepare('SELECT rowid, id, aiw, title, body FROM claim').all();
 console.log(`条目 ${rows.length} 条`);
 
 if (!dry) {
