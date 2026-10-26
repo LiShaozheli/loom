@@ -59,9 +59,9 @@ test('会话自测：14 轮真实用法', async (t) => {
   const { call, cleanups, names, sections } = boot(path.join(dir, 'loom.db'));
 
   try {
-    await t.test('0. 十四个工具都在，且注册了两段 prompt', () => {
+    await t.test('0. 十五个工具都在，且注册了两段 prompt', () => {
       assert.deepEqual(names.sort(), [
-        'memory_decay', 'memory_doc_search', 'memory_doc_write', 'memory_forget', 'memory_hot', 'memory_link', 'memory_note',
+        'memory_decay', 'memory_diag', 'memory_doc_search', 'memory_doc_write', 'memory_forget', 'memory_hot', 'memory_link', 'memory_note',
         'memory_outline', 'memory_recall', 'memory_related', 'memory_settle', 'memory_stats', 'memory_verify', 'memory_write',
       ]);
       assert.deepEqual(sections.map((x) => x.name).sort(), ['loom-hot-memory', 'loom-memory-protocol']);
