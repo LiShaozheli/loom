@@ -1,6 +1,6 @@
 {
   "name": "loom",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "private": true,
   "type": "module",
   "description": "LOOM — 分层记忆：AI文 做证据、题档 做路标、哈希链保证可验、epoch 加密保证可删",

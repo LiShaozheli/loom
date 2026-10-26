@@ -20,6 +20,7 @@ import { buildHotMemory } from './vendor/hot.js';
 import { resolveDbPath } from './vendor/paths.js';
 import { detectIntent, stripCue } from './vendor/capture.js';
 import { pickDurable } from './vendor/autocapture.js';
+import { archiveMessages } from './vendor/archive.js';
 import { runLoomCommand } from './vendor/command.js';
 import { Chronicle } from './vendor/chronicle.js';
 import { SqliteLedger } from './vendor/sqlite-ledger.js';
@@ -171,6 +172,17 @@ export function apply(ctx, config = {}) {
     return { docId: doc.id, claimId, rejected: r.ok ? null : r.gate.verdict, kind };
   };
 
+  // ---- 原文归档：一条都不丢 ----
+  // 先把已归档的指纹读回来，重启后不会重复写
+  const archivedKeys = new Set();
+  try {
+    for (const ev of chronicle.read(epoch)) {
+      if (ev?.event?.kind === 'msg' && ev.event.key) archivedKeys.add(ev.event.key);
+    }
+  } catch {
+    // 读不到就当空集合
+  }
+
   // ---- 自动捕获：每轮从用户输入里挑值得记的 ----
   // 保守规则，不调模型；宁可漏，不可脏。
   if (config.autoCapture !== false) {
@@ -179,6 +191,13 @@ export function apply(ctx, config = {}) {
         ctx.on('agent/pre-step', (decision, next) => {
           try {
             const msgs = decision?.messages ?? [];
+            // 1) 原文全收（寒暄、口癖、粘贴都留）
+            try {
+              archiveMessages(chronicle, chronicle.currentEpoch({ everyDays: epochDays }), msgs, archivedKeys);
+            } catch {
+              // 归档失败不影响这一轮
+            }
+            // 2) 再从原文里抽出可检索的视图
             const lastUser = [...msgs].reverse().find((m) => m?.role === 'user');
             const text = typeof lastUser?.content === 'string'
               ? lastUser.content
@@ -589,6 +608,44 @@ export function apply(ctx, config = {}) {
     async execute() {
       const hot = hotNow();
       return { injected: config.hot !== false, budgetBytes: hotBytes, bytes: hot.bytes, counts: hot.counts, omitted: hot.omitted, text: hot.text };
+    },
+  });
+
+  // ---- 原文检索：从归档里把上下文捞回来 ----
+  ctx.tools.register({
+    name: 'memory_archive_search',
+    description:
+      '在原文归档里检索（逐字，不过滤寒暄与粘贴）。返回命中的对话片段，用于还原上下文。',
+    parameters: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: '要找回的字词' },
+        limit: { type: 'number', description: '默认 10' },
+        role: { type: 'string', description: '只看 user / assistant / system' },
+      },
+      required: ['query'],
+    },
+    output: OUT,
+    async execute(args) {
+      const q = String(args.query ?? '').trim();
+      const limit = Number(args.limit ?? 10);
+      if (!q) return { ok: false, reason: '给个关键词' };
+      const hits = [];
+      for (const e of chronicle.epochs()) {
+        if (e.destroyed) continue;
+        let events = [];
+        try { events = chronicle.read(e.id); } catch { continue; }
+        for (const ev of events) {
+          const m = ev.event;
+          if (m?.kind !== 'msg') continue;
+          if (args.role && m.role !== args.role) continue;
+          if (!String(m.text ?? '').includes(q)) continue;
+          hits.push({ role: m.role, at: m.at, text: String(m.text).slice(0, 300), epoch: e.id });
+          if (hits.length >= limit) break;
+        }
+        if (hits.length >= limit) break;
+      }
+      return { ok: true, hits, total: hits.length };
     },
   });
 

@@ -17,6 +17,7 @@ function boot(dbPath) {
   const tools = new Map();
   const cleanups = [];
   const sections = [];
+  const listeners = new Map();
 
   const base = {
     tools: { register: (d) => (tools.set(d.name, d), () => tools.delete(d.name)) },
@@ -24,6 +25,10 @@ function boot(dbPath) {
       const d = fn();
       if (typeof d === 'function') cleanups.push(d);
       return d;
+    },
+    on(event, fn) {
+      listeners.set(event, fn);
+      return () => {};
     },
     // Cordis 的可选服务访问方式
     get(name) {
@@ -51,17 +56,17 @@ function boot(dbPath) {
 
   apply(ctx, { dbPath, budget: 200 });
   const call = (name, args = {}) => tools.get(name).execute(args, {});
-  return { call, cleanups, names: [...tools.keys()], sections };
+  return { call, cleanups, names: [...tools.keys()], sections, listeners };
 }
 
 test('会话自测：14 轮真实用法', async (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'loom-conv-'));
-  const { call, cleanups, names, sections } = boot(path.join(dir, 'loom.db'));
+  const { call, cleanups, names, sections, listeners } = boot(path.join(dir, 'loom.db'));
 
   try {
-    await t.test('0. 十五个工具都在，且注册了两段 prompt', () => {
+    await t.test('0. 十六个工具都在，且注册了两段 prompt', () => {
       assert.deepEqual(names.sort(), [
-        'memory_decay', 'memory_diag', 'memory_doc_search', 'memory_doc_write', 'memory_forget', 'memory_hot', 'memory_link', 'memory_note',
+        'memory_archive_search', 'memory_decay', 'memory_diag', 'memory_doc_search', 'memory_doc_write', 'memory_forget', 'memory_hot', 'memory_link', 'memory_note',
         'memory_outline', 'memory_recall', 'memory_related', 'memory_settle', 'memory_stats', 'memory_verify', 'memory_write',
       ]);
       assert.deepEqual(sections.map((x) => x.name).sort(), ['loom-hot-memory', 'loom-memory-protocol']);
@@ -171,6 +176,18 @@ test('会话自测：14 轮真实用法', async (t) => {
       assert.equal(f2.ok, true);
       const v = await call('memory_verify', {});
       assert.equal(v.ok, true, '遗忘后链仍可验');
+    });
+
+    await t.test('14b. 原文归档：寒暄也一字不差地留着', async () => {
+      const step = listeners.get('agent/pre-step');
+      assert.equal(typeof step, 'function', '应注册 pre-step 监听器');
+      const before = (await call('memory_verify', {})).events;
+      step({ messages: [{ role: 'user', content: '嗯' }, { role: 'assistant', content: '好的' }] }, () => {});
+      const after = (await call('memory_verify', {})).events;
+      assert.equal(after, before + 2, '两条消息都应进编年层');
+      // 重复驱动不该重复归档
+      step({ messages: [{ role: 'user', content: '嗯' }, { role: 'assistant', content: '好的' }] }, () => {});
+      assert.equal((await call('memory_verify', {})).events, after);
     });
 
     await t.test('15. 遗忘：不留墓碑条目，计数要减一', async () => {
