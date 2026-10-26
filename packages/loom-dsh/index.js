@@ -109,7 +109,12 @@ export function apply(ctx, config = {}) {
 
   ctx.effect(() => () => ledger.close());
 
-  const hotNow = () => buildHotMemory(ledger.active(), { maxBytes: hotBytes });
+  /** 热记忆；传 sid 且 memoryScope=session 时只看本会话 + 全局 */
+  const hotFor = (sid) => {
+    const filter = memoryScope === 'session' && sid ? { session: sid } : {};
+    return buildHotMemory(ledger.active(undefined, filter), { maxBytes: hotBytes });
+  };
+  const hotNow = () => hotFor(null);
 
   /** 面板允许改的配置键（白名单，避免任意写配置） */
   const SETTABLE = new Set([
@@ -127,19 +132,53 @@ export function apply(ctx, config = {}) {
   };
 
   // ---- 自动注入：每轮都带一小块热记忆 ----
-  // 这是"替代 mnemon"的关键一块：记忆不该等模型想起来才查。
+  // 同一作用域下，注册在同名 scoped section 会覆盖 global 的那个：
+  // 全局那份当兜底（共享视图），每个 agent 再注册一份按会话过滤的。
   if (config.hot !== false) {
     try {
       const sp = promptSvc();
-      if (!sp?.section) throw new Error('no systemPrompt');
-      const dispose = sp.section({
-        name: 'loom-hot-memory',
-        order: 90,
-        text: () => hotNow().text,
-      });
-      if (typeof dispose === 'function') ctx.effect(() => dispose);
-    } catch {
-      // 注入失败不能连累工具：宁可这轮没热记忆，也不能让记忆功能整个失效
+      if (sp?.section) {
+        const dispose = sp.section({
+          name: 'loom-hot-memory',
+          order: 90,
+          text: () => hotFor(null).text,
+        });
+        if (typeof dispose === 'function') ctx.effect(() => dispose);
+      }
+    } catch (err) {
+      hookLog(err, 'global hot section failed');
+    }
+
+    try {
+      if (typeof ctx.on === 'function') {
+        ctx.on('agent/created', ({ agent }) => {
+          try {
+            const sid = agent?.id;
+            if (!sid) return;
+            const resolveSp = (from) => {
+              let got;
+              try { got = from?.systemPrompt; } catch { got = undefined; }
+              if (!got) {
+                try { got = typeof from?.get === 'function' ? from.get('systemPrompt') : undefined; } catch { got = undefined; }
+              }
+              return got;
+            };
+            const sp = resolveSp(agent.ctx);
+            if (!sp?.section) return;
+            agent.ctx.effect(() =>
+              sp.section({
+                name: 'loom-hot-memory',
+                order: 90,
+                text: () => hotFor(sid).text,
+              })
+            );
+          } catch (err) {
+            hookLog(err, 'per-agent hot section failed');
+          }
+        });
+      }
+    } catch (err) {
+      hookLog(err, 'agent/created listener failed');
     }
   }
 
@@ -704,6 +743,7 @@ export function apply(ctx, config = {}) {
           const limit = Math.min(Number(url.searchParams.get('limit') ?? 50), 200);
           // 默认只看对话（user/assistant）；要工具输出显式传 roles=user,assistant,tool
           const rolesParam = String(url.searchParams.get('roles') ?? 'user,assistant');
+          const sessionFilter = String(url.searchParams.get('session') ?? '').trim() || null;
           const roles = new Set(rolesParam.split(',').map((r) => r.trim()).filter(Boolean));
           const hits = [];
           for (const e of chronicle.epochs()) {
@@ -713,6 +753,7 @@ export function apply(ctx, config = {}) {
             for (const ev of events) {
               const m = ev?.event;
               if (m?.kind !== 'msg') continue;
+              if (sessionFilter && m.session && m.session !== sessionFilter) continue;
               if (roles.size && !roles.has(m.role)) continue;
               if (q && !String(m.text ?? '').includes(q)) continue;
               hits.push({ role: m.role, text: String(m.text ?? '').slice(0, 500), at: m.at });
@@ -983,6 +1024,7 @@ export function apply(ctx, config = {}) {
     output: OUT,
     async execute(args, exec = {}) {
       const q = String(args.query ?? '').trim();
+      const onlySession = memoryScope === 'session' ? exec?.agent?.id ?? null : null;
       const limit = Number(args.limit ?? 10);
       if (!q) return { ok: false, reason: '给个关键词' };
       const hits = [];
@@ -993,6 +1035,7 @@ export function apply(ctx, config = {}) {
         for (const ev of events) {
           const m = ev.event;
           if (m?.kind !== 'msg') continue;
+          if (onlySession && m.session && m.session !== onlySession) continue;
           if (args.role && m.role !== args.role) continue;
           if (!String(m.text ?? '').includes(q)) continue;
           hits.push({ role: m.role, at: m.at, text: String(m.text).slice(0, 300), epoch: e.id });
