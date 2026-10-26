@@ -1,5 +1,7 @@
 # LOOM
 
+[![CI](https://github.com/LiShaozheli/loom/actions/workflows/ci.yml/badge.svg)](https://github.com/LiShaozheli/loom/actions/workflows/ci.yml)
+
 面向 DeepSeek Harness 的本地记忆层：**原文一条不丢，视图按需压缩，删除可验证。**
 
 ## 它解决什么问题
