@@ -20,7 +20,7 @@ import { buildHotMemory } from './vendor/hot.js';
 import { resolveDbPath } from './vendor/paths.js';
 import { detectIntent, stripCue } from './vendor/capture.js';
 import { pickDurable } from './vendor/autocapture.js';
-import { archiveMessages } from './vendor/archive.js';
+import { archiveMessages, messageText, messageKey } from './vendor/archive.js';
 import { runLoomCommand } from './vendor/command.js';
 import { Chronicle } from './vendor/chronicle.js';
 import { SqliteLedger } from './vendor/sqlite-ledger.js';
@@ -183,6 +183,58 @@ export function apply(ctx, config = {}) {
     // 读不到就当空集合
   }
 
+  // ---- 原文归档（正式通道）：session/event ----
+  // agent/pre-step 只带用户消息，且是 waterfall；session/event 是提交后的追加流，
+  // user / assistant / tool 全在，这才是"一条都不丢"的地方。
+  const hookLog = (err) => {
+    try {
+      fs.appendFileSync(path.join(path.dirname(dbPath), 'hook-errors.log'), `${new Date().toISOString()} ${err?.stack ?? err}\n`);
+    } catch {}
+  };
+
+  try {
+    if (typeof ctx.on === 'function') {
+      ctx.on('session/event', (session, event) => {
+        try {
+          const type = event?.type;
+          let role = null;
+          let msg = null;
+          if (type === 'user/message') {
+            role = 'user';
+            msg = event.data;
+          } else if (type === 'assistant/message') {
+            role = 'assistant';
+            msg = event.data?.message;
+          } else if (type === 'tool/result') {
+            role = 'tool';
+            msg = event.data?.message;
+          }
+          if (!role || !msg) return;
+
+          const text = messageText(msg);
+          if (!text) return;
+          const key = messageKey({ role, content: text });
+          if (archivedKeys.has(key)) return;
+          archivedKeys.add(key);
+
+          chronicle.append(chronicle.currentEpoch({ everyDays: epochDays }), {
+            kind: 'msg',
+            role,
+            text,
+            len: text.length,
+            at: event?.time ?? Date.now(),
+            seq: event?.seq,
+            key,
+          });
+        } catch (err) {
+          hookLog(err);
+        }
+      });
+    }
+  } catch (err) {
+    hookLog(err);
+  }
+
   // ---- 自动捕获：每轮从用户输入里挑值得记的 ----
   // 保守规则，不调模型；宁可漏，不可脏。
   if (config.autoCapture !== false) {
@@ -191,13 +243,7 @@ export function apply(ctx, config = {}) {
         ctx.on('agent/pre-step', (decision, next) => {
           try {
             const msgs = decision?.messages ?? [];
-            // 1) 原文全收（寒暄、口癖、粘贴都留）
-            try {
-              archiveMessages(chronicle, chronicle.currentEpoch({ everyDays: epochDays }), msgs, archivedKeys);
-            } catch {
-              // 归档失败不影响这一轮
-            }
-            // 2) 再从原文里抽出可检索的视图
+            // 原文归档由 session/event 负责；这里只抽可检索的视图
             const lastUser = [...msgs].reverse().find((m) => m?.role === 'user');
             const text = typeof lastUser?.content === 'string'
               ? lastUser.content
@@ -366,8 +412,13 @@ export function apply(ctx, config = {}) {
       return { ok: v.ok, events: n };
     });
     const hot = hotNow();
+    let archived = 0;
+    try {
+      for (const ev of chronicle.read(epoch)) if (ev?.event?.kind === 'msg') archived++;
+    } catch {}
     return {
       total: active.length,
+      archived,
       byKind,
       epoch,
       hot: { bytes: hot.bytes, rule: hot.counts.rule, pref: hot.counts.pref, fact: hot.counts.fact },

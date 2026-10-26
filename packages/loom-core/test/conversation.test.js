@@ -178,16 +178,16 @@ test('会话自测：14 轮真实用法', async (t) => {
       assert.equal(v.ok, true, '遗忘后链仍可验');
     });
 
-    await t.test('14b. 原文归档：寒暄也一字不差地留着', async () => {
-      const step = listeners.get('agent/pre-step');
-      assert.equal(typeof step, 'function', '应注册 pre-step 监听器');
+    await t.test('14c. 原文归档走 session/event，assistant 也留', async () => {
+      const emit = listeners.get('session/event');
+      assert.equal(typeof emit, 'function', '应注册 session/event 监听器');
       const before = (await call('memory_verify', {})).events;
-      step({ messages: [{ role: 'user', content: '嗯' }, { role: 'assistant', content: '好的' }] }, () => {});
+      emit({}, { type: 'user/message', data: { role: 'user', content: '嗯' }, seq: 1, time: Date.now() });
+      emit({}, { type: 'assistant/message', data: { message: { role: 'assistant', content: [{ type: 'text', text: '我在' }] } }, seq: 2, time: Date.now() });
       const after = (await call('memory_verify', {})).events;
-      assert.equal(after, before + 2, '两条消息都应进编年层');
-      // 重复驱动不该重复归档
-      step({ messages: [{ role: 'user', content: '嗯' }, { role: 'assistant', content: '好的' }] }, () => {});
-      assert.equal((await call('memory_verify', {})).events, after);
+      assert.equal(after, before + 2, '两条都应进编年层');
+      const hit = await call('memory_archive_search', { query: '我在' });
+      assert.ok(hit.total >= 1, 'assistant 的回复也应可检索');
     });
 
     await t.test('15. 遗忘：不留墓碑条目，计数要减一', async () => {

@@ -169,7 +169,10 @@ window.__ModuleLoader__.load({
           'div',
           { style: C.sub },
           d
-            ? `${d.total} 条 · ${Object.entries(d.byKind || {}).map(([k, n]) => k + ' ' + n).join(' / ') || '空'}`
+            ? `${d.total} 条记忆 · ${d.archived || 0} 条对话归档` +
+              (Object.keys(d.byKind || {}).length
+                ? ' · ' + Object.entries(d.byKind).map(([k, n]) => k + ' ' + n).join(' / ')
+                : '')
             : state.loading
               ? '读取中…'
               : '没有数据'
