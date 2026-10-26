@@ -608,6 +608,10 @@ export function apply(ctx, config = {}) {
         scope: config.scope === 'workspace' ? 'workspace' : 'global',
         memoryScope: isolateAll ? 'session' : 'shared',
         isolatedSessions: [...isolatedSet],
+        // 面板要显示「当前真正用哪个库」：配置里可能是空串（用默认位置），
+        // 直接回显空串的话，用户看不出到底落在哪，换路径时也没有对照。
+        dbPath: String(config.dbPath ?? ''),
+        dbPathEffective: dbPath,
       },
     };
   };
