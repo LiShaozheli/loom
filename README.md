@@ -282,6 +282,33 @@ abstain（语料里没有答案的 75 题）返回空的比例全程保持 64%�
 
 剩下 31 条搜不到的是真正的词面鸿沟（问「修好」，记的是「修复」），要语义召回才能补。
 
+## 安装与打包
+
+两个包：
+
+| 包 | 作用 |
+| --- | --- |
+| `loom`（根） | 内核 + CLI + 评测工具，零依赖，Node 22 内置模块 |
+| `loom-memory`（`packages/loom-dsh`） | DSH 插件：14 个工具 + `/loom` 命令 + 自动注入 |
+
+本地安装（当前用法，软链）：
+
+```bash
+# 在 DSH 里执行 install_bundle，目标是插件目录
+# 或手动：把 packages/loom-dsh 加进 profile 依赖
+```
+
+打包检查：
+
+```bash
+npm pack --dry-run                        # 根包
+cd packages/loom-dsh && npm pack --dry-run # 插件包
+```
+
+**一个已知限制**：插件把 `schemastery` vendor 进了自己的 `node_modules`（软链安装时裸模块名解析不到 profile 的依赖）。
+npm 打包会排除 `node_modules`，所以**从 tarball 安装时 `Config` 会退化成 undefined**——
+插件仍可正常工作，只是设置页里没有可配项。软链安装没有这个问题。
+
 ## 进度
 
 - ✅ W1 骨架 + 契约 + 闸门
