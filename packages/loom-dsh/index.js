@@ -19,6 +19,7 @@ import { sweep } from './vendor/decay.js';
 import { buildHotMemory } from './vendor/hot.js';
 import { resolveDbPath } from './vendor/paths.js';
 import { detectIntent, stripCue } from './vendor/capture.js';
+import { runLoomCommand } from './vendor/command.js';
 import { Chronicle } from './vendor/chronicle.js';
 import { SqliteLedger } from './vendor/sqlite-ledger.js';
 
@@ -269,6 +270,45 @@ export function apply(ctx, config = {}) {
       const r = sweep(ledger, { apply: args.apply === true });
       return { applied: r.applied, counts: r.counts, rows: r.rows.slice(0, 20) };
     },
+  });
+
+
+  // ---- 斜杠命令：不开界面也能查 ----
+  ctx.effect(() => {
+    let dispose = () => {};
+    try {
+      const commands = typeof ctx.get === 'function' ? ctx.get('commands') : undefined;
+      if (commands?.register) {
+        dispose = commands.register({
+          name: 'loom',
+          description: 'LOOM 记忆：stats / outline / verify / hot / search',
+          input: { hint: 'stats | outline | verify | hot | search <关键词>' },
+          handler: (invocation) =>
+            runLoomCommand(invocation?.rawInput ?? '', {
+              ledger,
+              hot: hotNow,
+              verify: () => {
+                const rows = chronicle.epochs().map((e) => {
+                  if (e.destroyed) return { ok: true, events: 0 };
+                  const v = chronicle.verify(e.id);
+                  let n = 0;
+                  try { n = chronicle.read(e.id).length; } catch { n = 0; }
+                  return { ok: v.ok, events: n };
+                });
+                return {
+                  ok: rows.every((r) => r.ok),
+                  epochs: rows.length,
+                  events: rows.reduce((n, r) => n + r.events, 0),
+                  current: epoch,
+                };
+              },
+            }),
+        });
+      }
+    } catch {
+      // 命令注册失败不影响工具
+    }
+    return dispose;
   });
 
   // ---- 关系边 ----
