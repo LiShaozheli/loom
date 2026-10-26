@@ -45,6 +45,11 @@ window.__ModuleLoader__.load({
         out.bootKeys = Object.keys(window.__DSH_BOOT__ || {}).slice(0, 20);
         const t = window.__DSH_TRANSPORT__;
         out.transport = typeof t === 'string' ? t.slice(0, 80) : (t && typeof t === 'object' ? Object.keys(t).slice(0, 12) : String(t));
+        try {
+          out.transportValues = t && typeof t === 'object'
+            ? Object.fromEntries(Object.entries(t).map(([k, v]) => [k, typeof v === 'string' ? v.slice(0, 60) : typeof v]))
+            : String(t).slice(0, 60);
+        } catch {}
         out.globalHost = typeof globalThis.host;
         out.windowHost = typeof window.host;
       } catch {}
@@ -101,7 +106,8 @@ window.__ModuleLoader__.load({
       const t = window.__DSH_TRANSPORT__;
       if (typeof t === 'string') pick.push(t);
       if (t && typeof t === 'object') {
-        for (const k of ['url', 'origin', 'baseUrl', 'endpoint', 'http', 'httpUrl', 'host']) {
+        // 不枚举键名：传输层的键叫 streamBaseUrl 这种，猜名字猜不完
+        for (const k of Object.keys(t)) {
           if (typeof t[k] === 'string') pick.push(t[k]);
         }
       }
