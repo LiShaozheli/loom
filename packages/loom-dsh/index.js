@@ -28,13 +28,89 @@ import { SqliteLedger } from './vendor/sqlite-ledger.js';
 
 const text = (s) => [{ type: 'text', text: String(s) }];
 
+// ---- 进程内共享状态 ----
+// 宿主重载插件时，模块本身也可能被重新导入一次；模块顶层的变量会各自一份。
+// 所以「全进程只能有一份」的东西（打开的库 / 当前实例 / 路由表）必须挂在 globalThis 上，
+// 否则新旧两份模块各看到自己的 Map，引用计数和路由去重都会失效。
+const SHARED =
+  globalThis.__LOOM_SHARED__ ??
+  (globalThis.__LOOM_SHARED__ = {
+    ledgers: new Map(), // dbPath -> { refs, ledger }
+    live: null, // 当前活着的 apply 实例
+    routes: new Map(), // path -> 当前实例的 handler
+    // 注意：不能用对象键记"这个 webServer 注册过没有"。宿主每次 apply 给的
+    // 都是新的服务代理，对象键永远 miss；而按 path 记账又会在 webServer 真被
+    // 重建时漏挂。所以不记账：每次照常注册，把 duplicate 当成"已挂上"。
+    seedInstalled: false, // 首屏种子只装一次
+    log: null, // 当前实例的 hookLog，给全局的兜底用
+  });
+
+// 热重载会复用同一个 SHARED 对象，上一版写的字段可能对不上，补齐再用
+SHARED.ledgers ??= new Map();
+SHARED.routes ??= new Map();
+if (typeof SHARED.seedInstalled !== 'boolean') SHARED.seedInstalled = false;
+
+// ---- 打开的库：按路径去重 + 引用计数 ----
+// 宿主重载插件时新旧两个实例会短暂并存，旧实例的 prompt section 可能还活着。
+// 各自开一个连接不算错，各自 close 才是灾难：一个关掉，另一个就用不了了。
+const OPEN_LEDGERS = SHARED.ledgers;
+
+/** @returns {{ledger: SqliteLedger, release: () => void}} */
+function acquireLedger(dbPath) {
+  const key = path.resolve(dbPath);
+  let rec = OPEN_LEDGERS.get(key);
+  if (!rec) {
+    rec = { refs: 0, ledger: new SqliteLedger(key) };
+    OPEN_LEDGERS.set(key, rec);
+  }
+  rec.refs += 1;
+  let released = false;
+  return {
+    ledger: rec.ledger,
+    release() {
+      if (released) return;
+      released = true;
+      rec.refs -= 1;
+      if (rec.refs > 0) return;
+      OPEN_LEDGERS.delete(key);
+      try {
+        rec.ledger.close();
+      } catch {
+        // 已经关了，或者进程正在退出
+      }
+    },
+  };
+}
+
+
 const OUT = {
   schema: { type: 'object', additionalProperties: true },
   render: (_args, value) => text(JSON.stringify(value, null, 2)),
 };
 
 
-// ---- 配置 schema（设置页据此渲染）----
+/** 当前活着的实例；插件卸载或正在重载时是 null */
+function liveNow() {
+  return SHARED.live;
+}
+
+/** 热记忆文本：永远读「当前实例」，读不到就给空串。
+ *  装 prompt 的时候绝不允许抛——记忆是增强，不是前提。
+ *  失败原因（库被关、库损坏、磁盘满……）写进 hook-errors.log，这一轮照常继续。 */
+function hotText(sid) {
+  try {
+    const live = liveNow();
+    if (!live) return '';
+    const got = live.hotFor(sid);
+    return got?.text == null ? '' : String(got.text);
+  } catch (err) {
+    try {
+      SHARED.log?.(err, 'prompt section failed');
+    } catch {}
+    return '';
+  }
+}
+
 // schemastery 已 vendor 到本包 node_modules：软链安装时裸模块名解析不到 profile 的依赖。
 let Schema = null;
 try {
@@ -56,8 +132,11 @@ export const Config = Schema
       protocol: Schema.boolean().description('是否注入「什么时候该写、该查」的使用协议').default(true),
       autoCapture: Schema.boolean().description('从对话里自动挑值得记的内容（规则判定，不调模型）').default(true),
       memoryScope: Schema.union([Schema.const('shared'), Schema.const('session')])
-        .description('shared：所有会话共享记忆；session：只召回本会话 + 全局条目')
+        .description('默认范围：shared 所有会话共享；session 每个会话只看自己写的 + 公共条目')
         .default('shared'),
+      isolatedSessions: Schema.array(Schema.string())
+        .description('单独特定的独立记忆会话 id；列在这里的会话只召回自己写的 + 公共条目')
+        .default([]),
       autoCaptureLevel: Schema.union([Schema.const('normal'), Schema.const('strict')])
         .description('normal 连偏好与项目陈述一起记；strict 只认标识符与参数')
         .default('normal'),
@@ -88,9 +167,16 @@ export function apply(ctx, config = {}) {
   const policy = config.render ?? 'legend';
   const hotBytes = Number(config.hotBytes ?? DEFAULT_HOT_BYTES);
   const autoCaptureLevel = config.autoCaptureLevel === 'strict' ? 'strict' : 'normal';
-  // shared：所有会话同一份记忆；session：只召回「本会话 + 全局」条目
-  const memoryScope = config.memoryScope === 'session' ? 'session' : 'shared';
-  const scopeFilter = (sid) => (memoryScope === 'session' && sid ? { session: sid } : {});
+  // 谁能看到谁的记忆：
+  //   memoryScope=session      默认就把每个会话隔开（老开关，保留）
+  //   isolatedSessions=[...]   只隔开名单里的会话，其余共享（面板上那个下拉框选的就是它）
+  // 两种同时存在时取并集：名单内的会话一定独立。
+  const isolateAll = config.memoryScope === 'session';
+  const isolatedSet = new Set(
+    (Array.isArray(config.isolatedSessions) ? config.isolatedSessions : []).map(String).filter(Boolean)
+  );
+  const isIsolated = (sid) => !!sid && (isolateAll || isolatedSet.has(String(sid)));
+  const scopeFilter = (sid) => (isIsolated(sid) ? { session: sid } : {});
   const dbPath =
     config.dbPath && config.dbPath.trim()
       ? config.dbPath
@@ -99,7 +185,25 @@ export function apply(ctx, config = {}) {
         : path.join(process.env.DSH_HOME ?? path.join(os.homedir(), '.dsh'), 'loom', 'loom.db');
 
   fs.mkdirSync(path.dirname(dbPath), { recursive: true });
-  const ledger = new SqliteLedger(dbPath);
+
+  // 失败留痕。必须定义在 apply 最前面：下面装 prompt section 时就要用到它。
+  // （以前它在 300 行开外，谁想在 section 里引用就先撞 TDZ，于是只能裸调用，一抛就整轮完蛋）
+  const hookLog = (err, note) => {
+    if (!err && !note) return;
+    try {
+      const line = err ? String(err?.stack ?? err) : String(note);
+      fs.appendFileSync(path.join(path.dirname(dbPath), 'hook-errors.log'), `${new Date().toISOString()} ${line}\n`);
+    } catch {}
+  };
+  SHARED.log = hookLog;
+
+  // 一个库路径只留一个打开的连接。
+  // 起因是一个真实事故：改任何设置都会让宿主机重载这个插件——旧实例 dispose 时把库关了，
+  // 而挂在各 agent 上的热记忆 section（生命周期跟着 agent，不跟着插件）还握着旧连接，
+  // 于是下一轮装 prompt 时抛 "database is not open"，整轮失败。
+  // 引用计数解决它：新实例拿到的是同一个连接，旧闭包读到的也是活的。
+  const conn = acquireLedger(dbPath);
+  const ledger = conn.ledger;
 
   // L0：编年层。每次写入都追加到哈希链，账本可从链重建、可验未篡改。
   const chronicle = new Chronicle(path.join(path.dirname(dbPath), 'chronicle'));
@@ -107,18 +211,25 @@ export function apply(ctx, config = {}) {
   const epochDays = Number(config.epochDays ?? 7);
   let epoch = chronicle.currentEpoch({ everyDays: epochDays });
 
-  ctx.effect(() => () => ledger.close());
-
-  /** 热记忆；传 sid 且 memoryScope=session 时只看本会话 + 全局 */
-  const hotFor = (sid) => {
-    const filter = memoryScope === 'session' && sid ? { session: sid } : {};
-    return buildHotMemory(ledger.active(undefined, filter), { maxBytes: hotBytes });
-  };
+  /** 热记忆；传 sid 且该会话被划成独立时只看本会话 + 全局 */
+  const hotFor = (sid) => buildHotMemory(ledger.active(undefined, scopeFilter(sid)), { maxBytes: hotBytes });
   const hotNow = () => hotFor(null);
+
+  // 把自己登记成「当前实例」：上一代实例遗留的 prompt section 和路由，取到的都是这一份。
+  const myLive = { hotFor, snapshot: null };
+  SHARED.live = myLive;
+
+  // 卸载时：先摘掉自己的登记（别让旧闭包再被当成活的），再减引用。
+  // 连接不直接 close——别的实例可能还在用。
+  ctx.effect(() => () => {
+    if (SHARED.live === myLive) SHARED.live = null;
+    conn.release();
+  });
 
   /** 面板允许改的配置键（白名单，避免任意写配置） */
   const SETTABLE = new Set([
-    'budget', 'hot', 'hotBytes', 'protocol', 'autoCapture', 'autoCaptureLevel', 'epochDays', 'render', 'scope', 'dbPath', 'memoryScope',
+    'budget', 'hot', 'hotBytes', 'protocol', 'autoCapture', 'autoCaptureLevel', 'epochDays', 'render', 'scope', 'dbPath',
+    'memoryScope', 'isolatedSessions',
   ]);
 
   // Cordis 的服务代理对未声明 inject 的属性访问会抛错（?. 挡不住），
@@ -141,7 +252,8 @@ export function apply(ctx, config = {}) {
         const dispose = sp.section({
           name: 'loom-hot-memory',
           order: 90,
-          text: () => hotFor(null).text,
+          // hotText 读「当前实例」且永不抛：插件重载后旧 section 也能读到新实例的热记忆
+          text: () => hotText(null),
         });
         if (typeof dispose === 'function') ctx.effect(() => dispose);
       }
@@ -169,7 +281,7 @@ export function apply(ctx, config = {}) {
               sp.section({
                 name: 'loom-hot-memory',
                 order: 90,
-                text: () => hotFor(sid).text,
+                text: () => hotText(sid),
               })
             );
           } catch (err) {
@@ -238,14 +350,7 @@ export function apply(ctx, config = {}) {
   // ---- 原文归档（正式通道）：session/event ----
   // agent/pre-step 只带用户消息，且是 waterfall；session/event 是提交后的追加流，
   // user / assistant / tool 全在，这才是"一条都不丢"的地方。
-  const hookLog = (err, note) => {
-    if (!err && !note) return;
-    try {
-      const line = err ? String(err?.stack ?? err) : String(note);
-      fs.appendFileSync(path.join(path.dirname(dbPath), 'hook-errors.log'), `${new Date().toISOString()} ${line}\n`);
-    } catch {}
-  };
-
+  // （hookLog 在本函数开头就定义了，底下各处直接用）
   try {
     if (typeof ctx.on === 'function') {
       ctx.on('session/event', (session, event) => {
@@ -501,9 +606,14 @@ export function apply(ctx, config = {}) {
         epochDays,
         render: policy,
         scope: config.scope === 'workspace' ? 'workspace' : 'global',
+        memoryScope: isolateAll ? 'session' : 'shared',
+        isolatedSessions: [...isolatedSet],
       },
     };
   };
+
+  // 面板快照挂到「当前实例」上：首屏种子和路由都经由它取，重载后自动指向新实例
+  myLive.snapshot = snapshotForPanel;
 
   const mountedRoutes = [];
 
@@ -535,12 +645,47 @@ export function apply(ctx, config = {}) {
 
     // 逐条注册：一条失败不该带走其余，而且失败必须留痕
     // （之前整块 try 包住 8 条 register，任何一条抛错其余全部静默失踪）
+    //
+    // 每条路在本进程里只向 webServer 注册一次，之后重载只替换 handler：
+    //   - 不然每次重载都撞 "duplicate exact route"，而且被拒的是新实例，
+    //     浏览器那边一直连着上一代实例 → 请求空响应
+    //   - 分发时取 SHARED.routes 里的当前 handler，所以路由永远服务最新实例
+    //   - 已注册的路由不重复注册，只更新 SHARED.routes 里那一项
     const safeRegister = (spec) => {
+      const p = spec.path;
+      SHARED.routes.set(p, spec.handler);
+      mountedRoutes.push(p);
+
+      const dispatch = async (req, res) => {
+        const handler = SHARED.routes.get(p);
+        // 插件被卸载/正在重载：给一个能看懂的答案，别让浏览器等到超时
+        const bail = (code, error) => {
+          try {
+            if (!res.headersSent) res.writeHead(code, CORS_JSON);
+            res.end(JSON.stringify({ ok: false, error }));
+          } catch {}
+        };
+        if (!SHARED.live) return bail(503, 'loom 插件已停用或正在重载，稍后再试');
+        if (typeof handler !== 'function') return bail(503, 'loom 路由还没有就绪');
+        try {
+          return await handler(req, res);
+        } catch (err) {
+          // handler 自己没兜住的异常，绝不能变成"空响应"（浏览器只会报 ERR_EMPTY_RESPONSE）
+          hookLog(err, `route crashed: ${p}`);
+          return bail(500, String(err?.message ?? err));
+        }
+      };
+
       try {
-        web.register(spec);
-        mountedRoutes.push(spec.path);
+        web.register({ ...spec, handler: dispatch });
       } catch (err) {
-        hookLog(err, `route failed: ${spec.path}`);
+        // "已存在"不是失败：那一定是上一代实例挂的同一个 dispatch，
+        // 它也走 SHARED.routes，功能完全等价，安静复用即可。
+        // 不预先记账（宿主的服务代理每次 apply 都是新对象，记不住），
+        // 而是每次都试注册、把 duplicate 当成功——万一 webServer 真被重建，也能自动补挂。
+        if (!String(err?.message ?? err).includes('duplicate exact route')) {
+          hookLog(err, `route failed: ${p}`);
+        }
       }
     };
     // 设置写入：面板表单 -> 宿主 configEditor 持久化
@@ -770,6 +915,172 @@ export function apply(ctx, config = {}) {
       },
     });
 
+    // ---- 对话列表：给「把某个对话设成独立记忆」那个下拉框用 ----
+    // 优先问宿主的 sessionQuery（有真标题），拿不到就退回归档里见过的会话 id。
+    // 退路很重要：精简组合里没有 sessionQuery，面板不该因此打不开。
+    const listConversations = async () => {
+      const counts = new Map();
+      const firstText = new Map();
+      try {
+        for (const e of chronicle.epochs()) {
+          if (e.destroyed) continue;
+          let events = [];
+          try { events = chronicle.read(e.id); } catch { continue; }
+          for (const ev of events) {
+            const m = ev?.event;
+            if (m?.kind !== 'msg' || !m.session) continue;
+            const k = String(m.session);
+            counts.set(k, (counts.get(k) || 0) + 1);
+            if (m.role === 'user' && !firstText.has(k)) firstText.set(k, String(m.text ?? ''));
+          }
+        }
+      } catch (err) {
+        hookLog(err, 'archive scan failed');
+      }
+
+      let rows = [];
+      let source = 'archive';
+      try {
+        const sq = typeof ctx.get === 'function' ? ctx.get('sessionQuery') : undefined;
+        if (sq?.listSessions) {
+          const records = (await sq.listSessions()) || [];
+          source = 'sessionQuery';
+          // 子代理会话是实现细节，不进给人选的列表
+          const roots = records.filter(
+            (r) => r?.header?.id && !r.header.parentSession && r.header.origin !== 'subagent'
+          );
+          const titles = new Map();
+          try {
+            if (sq.readTitleSnapshots && roots.length) {
+              const got = await sq.readTitleSnapshots(roots.map((r) => r.header.id));
+              for (const one of got || []) {
+                const t = one?.status === 'fulfilled' ? one.value?.title?.title : '';
+                if (t) titles.set(String(one.sessionId), String(t));
+              }
+            }
+          } catch (err) {
+            hookLog(err, 'readTitleSnapshots failed');
+          }
+          rows = roots.map((r) => {
+            const id = String(r.header.id);
+            return {
+              id,
+              title: titles.get(id) || '',
+              createdAt: Number(r.header.createdAt ?? 0),
+              cwd: r.header.cwd ?? '',
+              live: !!r.live,
+              messages: counts.get(id) || 0,
+            };
+          });
+        }
+      } catch (err) {
+        hookLog(err, 'sessionQuery unavailable, falling back to archive');
+      }
+
+      if (!rows.length) {
+        rows = [...counts.keys()].map((id) => ({
+          id, title: '', createdAt: 0, cwd: '', live: false, messages: counts.get(id) || 0,
+        }));
+      }
+
+      for (const r of rows) {
+        if (!r.title) {
+          const t = String(firstText.get(r.id) ?? '').replace(/\s+/g, ' ').trim();
+          r.title = t ? (t.length > 20 ? t.slice(0, 20) + '…' : t) : '未命名对话';
+        }
+        r.isolated = isIsolated(r.id);
+        r.short = r.id.slice(0, 8);
+      }
+      return {
+        source,
+        sessions: rows
+          // 保留：在线会话、归档里有消息的会话、以及被划成「独立记忆」的会话。
+          // 第三条是为了让人能把它从名单里取出来——离线且没归档过消息的独立会话，
+          // 一旦被这里的 liveness 过滤掉，面板上就再也选不到它，等于单向门。
+          .filter((r) => r.isolated || r.live || r.messages > 0)
+          .sort((a, b) => (b.live ? 1 : 0) - (a.live ? 1 : 0) || b.createdAt - a.createdAt || b.messages - a.messages)
+          .slice(0, 80),
+      };
+    };
+
+    const CONFIG_ENTRY = (editor) => {
+      const list = editor.entries();
+      return (
+        list.find((e) => e?.options?.id === 'loom-memory') ??
+        list.find((e) => e?.id === 'loom-memory') ??
+        list.find((e) => e?.name === 'loom-memory')
+      );
+    };
+
+    safeRegister({
+      kind: 'exact',
+      path: '/loom/sessions',
+      handler: async (req, res) => {
+        const cors = CORS_JSON;
+        if (req?.method === 'OPTIONS') {
+          res.writeHead(204, CORS_PREFLIGHT);
+          res.end();
+          return;
+        }
+        try {
+          const data = await listConversations();
+          res.writeHead(200, cors);
+          res.end(JSON.stringify({ ok: true, ...data }));
+        } catch (e) {
+          res.writeHead(500, cors);
+          res.end(JSON.stringify({ ok: false, error: String(e?.message ?? e) }));
+        }
+      },
+    });
+
+    // 把一个会话加进/移出「独立记忆」名单。
+    // 走 configEditor 的 read-modify-write，不做前端算全量数组再覆盖——那是竞态。
+    safeRegister({
+      kind: 'exact',
+      path: '/loom/isolate',
+      handler: async (req, res) => {
+        const cors = CORS_JSON;
+        if (req?.method === 'OPTIONS') {
+          res.writeHead(204, CORS_PREFLIGHT);
+          res.end();
+          return;
+        }
+        const reply = (code, obj) => { res.writeHead(code, cors); res.end(JSON.stringify(obj)); };
+        try {
+          const body = JSON.parse((await readBody(req)).toString('utf8') || '{}');
+          const id = String(body.id ?? '').trim();
+          const on = body.isolated !== false;
+          if (!id) return reply(400, { ok: false, error: '缺少会话 id' });
+
+          const editor = typeof ctx.get === 'function' ? ctx.get('configEditor') : undefined;
+          if (!editor?.edit || !editor?.entries) return reply(503, { ok: false, error: '本宿主没有 configEditor' });
+          const entry = CONFIG_ENTRY(editor);
+          if (!entry) return reply(404, { ok: false, error: '找不到 loom-memory 这一行配置' });
+
+          let next = [];
+          await editor.edit(entry, (current) => {
+            const set = new Set(
+              (Array.isArray(current.isolatedSessions) ? current.isolatedSessions : []).map(String).filter(Boolean)
+            );
+            if (on) set.add(id); else set.delete(id);
+            next = [...set];
+            return { ...current, isolatedSessions: next };
+          });
+          // 本次 apply 内部的缓存也要立刻跟着变，否则要等重启才生效
+          if (on) isolatedSet.add(id); else isolatedSet.delete(id);
+          return reply(200, {
+            ok: true,
+            id,
+            isolated: on,
+            isolatedSessions: next,
+            note: '已保存；新的召回与注入立即按新范围走',
+          });
+        } catch (e) {
+          return reply(500, { ok: false, error: String(e?.message ?? e) });
+        }
+      },
+    });
+
     safeRegister({
       kind: 'exact',
       path: '/loom/state',
@@ -798,11 +1109,14 @@ export function apply(ctx, config = {}) {
       },
     });
     // 首屏种子：路由万一被鉴权挡住，面板也先有数据可看
-    if (typeof web.tapIndex === 'function') {
+    // 同一个理由：只装一次，取当前实例的快照（否则每次重载都往 </head> 里多插一段）
+    if (typeof web.tapIndex === 'function' && !SHARED.seedInstalled) {
+      SHARED.seedInstalled = true;
       web.tapIndex((html) => {
         let json = '{}';
         try {
-          json = JSON.stringify(snapshotForPanel()).replace(/</g, '\\u003c');
+          const snap = SHARED.live?.snapshot?.();
+          if (snap) json = JSON.stringify(snap).replace(/</g, '\\u003c');
         } catch {}
         const tag = `<script>window.__LOOM_SEED__=${json};</script></head>`;
         return html.includes('</head>') ? html.replace('</head>', tag) : html + tag;
@@ -1024,7 +1338,8 @@ export function apply(ctx, config = {}) {
     output: OUT,
     async execute(args, exec = {}) {
       const q = String(args.query ?? '').trim();
-      const onlySession = memoryScope === 'session' ? exec?.agent?.id ?? null : null;
+      const sid = exec?.agent?.id ?? null;
+      const onlySession = isIsolated(sid) ? sid : null;
       const limit = Number(args.limit ?? 10);
       if (!q) return { ok: false, reason: '给个关键词' };
       const hits = [];
