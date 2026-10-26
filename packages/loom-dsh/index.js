@@ -515,6 +515,39 @@ export function apply(ctx, config = {}) {
       },
     });
 
+    // 原文检索：/loom/archive?q=关键词
+    web.register({
+      kind: 'exact',
+      path: '/loom/archive',
+      handler: async (req, res) => {
+        const cors = { 'access-control-allow-origin': '*', 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' };
+        try {
+          const url = new URL(req?.url ?? '/', 'http://localhost');
+          const q = String(url.searchParams.get('q') ?? '').trim();
+          const limit = Math.min(Number(url.searchParams.get('limit') ?? 50), 200);
+          const hits = [];
+          for (const e of chronicle.epochs()) {
+            if (e.destroyed) continue;
+            let events = [];
+            try { events = chronicle.read(e.id); } catch { continue; }
+            for (const ev of events) {
+              const m = ev?.event;
+              if (m?.kind !== 'msg') continue;
+              if (q && !String(m.text ?? '').includes(q)) continue;
+              hits.push({ role: m.role, text: String(m.text ?? '').slice(0, 500), at: m.at });
+              if (hits.length >= limit) break;
+            }
+            if (hits.length >= limit) break;
+          }
+          res.writeHead(200, cors);
+          res.end(JSON.stringify({ ok: true, q, total: hits.length, hits }));
+        } catch (e) {
+          res.writeHead(500, cors);
+          res.end(JSON.stringify({ ok: false, error: String(e?.message ?? e) }));
+        }
+      },
+    });
+
     web.register({
       kind: 'exact',
       path: '/loom/state',

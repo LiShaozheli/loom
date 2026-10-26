@@ -84,7 +84,7 @@ test('工厂返回 { inject, apply }，apply 里注册 panellist 图标与 main 
   body.apply(ctx);
 
   const names = registrations.map((r) => r.options.name);
-  assert.deepEqual(names, ['sidebar.panellist', 'main']);
+  assert.deepEqual(names, ['sidebar.panellist', 'main', 'conversation.chat.turnTail']);
 
   const icon = registrations[0].options;
   const panel = registrations[1].options;
@@ -92,6 +92,10 @@ test('工厂返回 { inject, apply }，apply 里注册 panellist 图标与 main 
   assert.equal(typeof icon.label === 'function' || typeof icon.label === 'string', true);
   assert.equal(panel.key, icon.id, 'main 的 key 必须与 panellist 的 id 一致');
   assert.equal(panel.key, 'loom');
+
+  const tail = registrations[2].options;
+  assert.equal(tail.id, 'loom-turn', '回合尾部用独立 id，避免覆盖别人的格子');
+  assert.notEqual(tail.id, icon.id, 'turnTail 与面板是不同槽位，id 不该复用带来的混淆');
 });
 
 test('两个组件都是函数（可渲染）', () => {
@@ -107,4 +111,5 @@ test('两个组件都是函数（可渲染）', () => {
   });
   assert.equal(typeof regs[0], 'function');
   assert.equal(typeof regs[1], 'function');
+  assert.equal(typeof regs[2], 'function');
 });

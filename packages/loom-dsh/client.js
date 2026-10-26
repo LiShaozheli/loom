@@ -97,6 +97,8 @@ window.__ModuleLoader__.load({
       const [tab, setTab] = React.useState('状态');
       const [draft, setDraft] = React.useState({});
       const [saved, setSaved] = React.useState(null);
+      const [q, setQ] = React.useState('');
+      const [hits, setHits] = React.useState(null);
       const base = hostOrigin();
 
       const load = React.useCallback(() => {
@@ -112,6 +114,16 @@ window.__ModuleLoader__.load({
       }, [base, seed]);
 
       React.useEffect(() => { load(); }, [load]);
+
+      const search = (word) => {
+        if (!base) return;
+        const text = String(word ?? '').trim();
+        if (!text) { setHits(null); return; }
+        fetch(base + '/loom/archive?q=' + encodeURIComponent(text), { credentials: 'omit' })
+          .then((r) => r.json())
+          .then((r) => setHits(r.hits || []))
+          .catch(() => setHits([]));
+      };
 
       const save = (key, value) => {
         if (!base) return;
@@ -183,14 +195,24 @@ window.__ModuleLoader__.load({
       }
 
       if (tab === '归档') {
-        const recent = (d && d.recent) || [];
+        const list = hits || (d && d.recent) || [];
         body = h('div', null,
-          h('div', { style: C.meta }, '原文逐条保存，含寒暄与粘贴；共 ' + ((d && d.archived) || 0) + ' 条'),
-          recent.length
-            ? recent.map((m, i) => h('div', { key: i, style: C.card },
+          h('div', { style: C.row },
+            h('input', {
+              style: { ...C.input, flex: 1, width: 'auto' },
+              placeholder: '在原文里搜…',
+              value: q,
+              onChange: (e) => setQ(e.target.value),
+              onKeyDown: (e) => { if (e.key === 'Enter') search(q); },
+            }),
+            h('button', { type: 'button', style: C.btn, onClick: () => search(q) }, '搜索')),
+          h('div', { style: C.meta }, '原文逐条保存，含寒暄与粘贴；共 ' + ((d && d.archived) || 0) + ' 条' +
+            (hits ? ' · 命中 ' + hits.length + ' 条' : '')),
+          list.length
+            ? list.map((m, i) => h('div', { key: i, style: C.card },
                 h('div', { style: C.meta }, m.role),
                 h('div', { style: C.text }, m.text)))
-            : h('div', { style: C.empty }, '还没有归档。')
+            : h('div', { style: C.empty }, q ? '没有匹配的原文。' : '还没有归档。')
         );
       }
 
@@ -242,6 +264,44 @@ window.__ModuleLoader__.load({
       );
     }
 
+
+    // 回合尾部：每轮回复下方一行，显示 LOOM 当前体量（每 30 秒最多取一次）
+    let tailCache = { at: 0, data: null };
+
+    function TurnTail() {
+      const [data, setData] = React.useState(tailCache.data);
+      React.useEffect(() => {
+        const now = Date.now();
+        if (tailCache.data && now - tailCache.at < 30000) {
+          setData(tailCache.data);
+          return;
+        }
+        const base = hostOrigin();
+        if (!base) return;
+        let alive = true;
+        fetch(base + '/loom/state', { credentials: 'omit' })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((d) => {
+            tailCache = { at: Date.now(), data: d };
+            if (alive) setData(d);
+          })
+          .catch(() => {});
+        return () => {
+          alive = false;
+        };
+      }, []);
+
+      if (!data) return null;
+      const mem = data.total || 0;
+      const arc = data.archived || 0;
+      if (!mem && !arc) return null;
+      return h(
+        'div',
+        { style: { fontSize: 11, opacity: 0.55, padding: '2px 0' } },
+        'LOOM · ' + mem + ' 条记忆 · ' + arc + ' 条原文归档'
+      );
+    }
+
     return {
       inject: ['slots'],
       apply(ctx) {
@@ -249,6 +309,9 @@ window.__ModuleLoader__.load({
           ctx.slots.register({ name: 'sidebar.panellist', id: 'loom', order: 40, label: () => 'LOOM 记忆' }, Icon)
         );
         ctx.slots.inject('main', () => ctx.slots.register({ name: 'main', key: 'loom' }, Panel));
+        ctx.slots.inject('conversation.chat.turnTail', () =>
+          ctx.slots.register({ name: 'conversation.chat.turnTail', id: 'loom-turn', order: 90 }, TurnTail)
+        );
       },
     };
   },
