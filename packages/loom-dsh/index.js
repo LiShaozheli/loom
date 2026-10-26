@@ -456,6 +456,8 @@ export function apply(ctx, config = {}) {
     };
   };
 
+  const mountedRoutes = [];
+
   const mountPanelData = (scope) => {
     // 跨源 POST 会先发预检；allow-headers 少一个 content-type，浏览器就直接拒绝。
     const CORS_JSON = {
@@ -470,14 +472,30 @@ export function apply(ctx, config = {}) {
       'access-control-max-age': '600',
     };
     // Cordis 的服务代理对未 inject 的属性访问会抛错，所以每条路都单独兜
-    let web;
-    try { web = scope?.webServer; } catch { web = undefined; }
-    if (!web) {
-      try { web = typeof scope?.get === 'function' ? scope.get('webServer') : undefined; } catch { web = undefined; }
-    }
+    const resolveWeb = (from) => {
+      let got;
+      try { got = from?.webServer; } catch { got = undefined; }
+      if (!got) {
+        try { got = typeof from?.get === 'function' ? from.get('webServer') : undefined; } catch { got = undefined; }
+      }
+      return got;
+    };
+    // ctx.inject 给的子上下文若取不到服务，退回插件自身的 ctx 再试一次
+    const web = resolveWeb(scope) ?? resolveWeb(ctx);
     if (!web?.register) return;
+
+    // 逐条注册：一条失败不该带走其余，而且失败必须留痕
+    // （之前整块 try 包住 8 条 register，任何一条抛错其余全部静默失踪）
+    const safeRegister = (spec) => {
+      try {
+        web.register(spec);
+        mountedRoutes.push(spec.path);
+      } catch (err) {
+        hookLog(err, `route failed: ${spec.path}`);
+      }
+    };
     // 设置写入：面板表单 -> 宿主 configEditor 持久化
-    web.register({
+    safeRegister({
       kind: 'exact',
       path: '/loom/config',
       handler: async (req, res) => {
@@ -530,7 +548,7 @@ export function apply(ctx, config = {}) {
       return Buffer.concat(chunks);
     };
 
-    web.register({
+    safeRegister({
       kind: 'exact',
       path: '/loom/forget',
       handler: async (req, res) => {
@@ -556,7 +574,7 @@ export function apply(ctx, config = {}) {
       },
     });
 
-    web.register({
+    safeRegister({
       kind: 'exact',
       path: '/loom/doc-save',
       handler: async (req, res) => {
@@ -582,7 +600,7 @@ export function apply(ctx, config = {}) {
       },
     });
 
-    web.register({
+    safeRegister({
       kind: 'exact',
       path: '/loom/import',
       handler: async (req, res) => {
@@ -605,7 +623,7 @@ export function apply(ctx, config = {}) {
     });
 
     // 文档详情：/loom/doc?id=xxx（含历史版本）
-    web.register({
+    safeRegister({
       kind: 'exact',
       path: '/loom/doc',
       handler: async (req, res) => {
@@ -644,7 +662,7 @@ export function apply(ctx, config = {}) {
     });
 
     // 打包下载：/loom/export.zip
-    web.register({
+    safeRegister({
       kind: 'exact',
       path: '/loom/export.zip',
       handler: async (req, res) => {
@@ -665,7 +683,7 @@ export function apply(ctx, config = {}) {
     });
 
     // 原文检索：/loom/archive?q=关键词
-    web.register({
+    safeRegister({
       kind: 'exact',
       path: '/loom/archive',
       handler: async (req, res) => {
@@ -701,7 +719,7 @@ export function apply(ctx, config = {}) {
       },
     });
 
-    web.register({
+    safeRegister({
       kind: 'exact',
       path: '/loom/state',
       handler: async (req, res) => {
@@ -992,7 +1010,14 @@ export function apply(ctx, config = {}) {
         }
       };
       const hot = hotNow();
+      let origin = null;
+      try {
+        const web = typeof ctx.get === 'function' ? ctx.get('webServer') : undefined;
+        if (web?.getOrigin) origin = web.getOrigin();
+      } catch {}
       return {
+        origin,
+        routes: mountedRoutes,
         services: {
           systemPrompt: has('systemPrompt'),
           webServer: has('webServer'),

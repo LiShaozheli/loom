@@ -400,7 +400,9 @@ window.__ModuleLoader__.load({
         state.error === 'desktop-mode'
           ? h('div', { style: C.err }, '读不到宿主地址，面板只能显示离线内容。')
           : state.error
-            ? h('div', { style: C.err }, '刷新失败：' + state.error)
+            ? h('div', { style: C.err },
+                '刷新失败：' + state.error +
+                '（推导地址 ' + (base || '无') + '；若持续失败，重启 DSH 后看 ~/.dsh/loom/hook-errors.log）')
             : null,
         body
       );
