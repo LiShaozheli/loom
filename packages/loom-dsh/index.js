@@ -588,6 +588,36 @@ export function apply(ctx, config = {}) {
     },
   });
 
+  // ---- 自检：这个宿主里哪些服务可用 ----
+  ctx.tools.register({
+    name: 'memory_diag',
+    description: '插件自检：本宿主里 systemPrompt / webServer / commands 是否可用，以及注入与面板的挂载状态。',
+    parameters: { type: 'object', properties: {} },
+    output: OUT,
+    async execute() {
+      const has = (name) => {
+        try {
+          const v = typeof ctx.get === 'function' ? ctx.get(name) : undefined;
+          return !!v;
+        } catch {
+          return false;
+        }
+      };
+      const hot = hotNow();
+      return {
+        services: {
+          systemPrompt: has('systemPrompt'),
+          webServer: has('webServer'),
+          commands: has('commands'),
+        },
+        injection: { enabled: config.hot !== false && config.protocol !== false, bytes: hot.bytes },
+        dbPath,
+        epoch,
+        total: ledger.active().length,
+      };
+    },
+  });
+
   // ---- 目录 ----
   ctx.tools.register({
     name: 'memory_outline',

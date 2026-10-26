@@ -58,8 +58,16 @@ window.__ModuleLoader__.load({
       const seed = (typeof window !== 'undefined' && window.__LOOM_SEED__) || null;
       const [state, setState] = React.useState({ loading: !seed, data: seed, error: null });
 
+      // 桌面模式没有 HTTP 服务，fetch 会以 "Failed to fetch" 失败；
+      // 这不是记忆坏了，是这条数据通道只在 web 模式下存在。
+      const httpMode = typeof window !== 'undefined' && /^https?:$/.test(window.location.protocol);
+
       const load = React.useCallback(() => {
         setState((s) => ({ ...s, loading: true, error: null }));
+        if (!httpMode) {
+          setState({ loading: false, data: seed, error: 'desktop-mode' });
+          return;
+        }
         fetch('/loom/state', { credentials: 'same-origin' })
           .then((r) => {
             if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -95,7 +103,13 @@ window.__ModuleLoader__.load({
           h('span', { style: { fontSize: 12, opacity: 0.6 } }, d && d.epoch ? '分片 ' + d.epoch : ''),
           h('button', { style: C.btn, onClick: load, type: 'button' }, '刷新')
         ),
-        state.error
+        state.error === 'desktop-mode'
+          ? h(
+              'div',
+              { style: C.err },
+              '桌面模式没有 HTTP 服务，面板读不到实时数据（工具仍然可用：让助手调 memory_outline 或输入 /loom outline）。'
+            )
+          : state.error
           ? h(
               'div',
               { style: C.err },

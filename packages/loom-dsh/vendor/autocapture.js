@@ -12,7 +12,7 @@
 
 const STRONG = /记住|记一下|记下|以后都|以后要|以后别|以后不|约定|我们说好|必须|禁止|一律|不要用|决定用|默认用/;
 const WEAK = /端口|路径|版本|地址|密码|账号|用\s?[A-Za-z]|改成|换成|固定在|定在|配置/;
-const QUESTION = /[?？]|吗|呢|怎么|如何|为什么|是不是|能不能|有没有/;
+const QUESTION = /[?？]|吗|呢|怎么|如何|为什么|是不是|能不能|有没有|对不对|行不行|好不好|咋回事/;
 const PURE_TASK = /^(帮|请|把|改|写|实现|修复|跑|执行|加|删|部署|提交|重跑|生成|整理|格式化|看看|检查)/;
 const AFFIRM = /^(好|行|可以|嗯|收到|谢谢|继续|ok)[。！!.~]*$/i;
 
@@ -34,12 +34,22 @@ export function pickDurable(text) {
   if (raw.length > 400) return { capture: false, kind: 'fact', reason: 'too-long', text: raw };
   if (AFFIRM.test(raw)) return { capture: false, kind: 'fact', reason: 'affirmation', text: raw };
 
-  const strong = STRONG.test(raw);
+  // 粘贴块（多行）不自动记：用户贴的是日志/报错/界面文字，不是陈述
+  if ((raw.match(/\n/g) || []).length >= 2) {
+    return { capture: false, kind: 'fact', reason: 'pasted-block', text: raw };
+  }
+
+  // 强线索必须出现在开头：整段话中间冒出个「记住」通常是在引用别处
+  const head = raw.slice(0, 20);
+  const strong = STRONG.test(head) || (STRONG.test(raw) && raw.length <= 60);
   if (!strong) {
     if (QUESTION.test(raw)) return { capture: false, kind: 'fact', reason: 'question', text: raw };
     if (PURE_TASK.test(raw)) return { capture: false, kind: 'fact', reason: 'pure-task', text: raw };
     if (!WEAK.test(raw)) return { capture: false, kind: 'fact', reason: 'no-signal', text: raw };
   }
+
+  // 即便命中强线索，整句是个问句也不记——那是在问，不是在交代
+  if (QUESTION.test(raw)) return { capture: false, kind: 'fact', reason: 'question', text: raw };
 
   const hits = KIND_HINT.filter(([, re]) => re.test(raw)).map(([k]) => k);
   return {

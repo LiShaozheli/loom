@@ -43,3 +43,11 @@ test('空白输入不炸', () => {
   assert.equal(pickDurable('').capture, false);
   assert.equal(pickDurable(null).capture, false);
 });
+
+test('粘贴块与引用不自动记（真实踩到过）', () => {
+  const ui = 'LOOM 记忆\n没有数据\n刷新\n刷新失败：Failed to fetch重新加载页面\n还没有记忆。对助手说「记住：…」即可。';
+  assert.equal(pickDurable(ui).capture, false);
+
+  const quote = '文档里写着「记住要先备份」，你看对不对';
+  assert.equal(pickDurable(quote).capture, false);
+});
