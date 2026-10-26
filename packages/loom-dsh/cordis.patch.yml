@@ -4,3 +4,14 @@
       config:
         budget: 300
         dbPath: ''
+        # global = 跟着用户走；workspace = 只属于当前工作区
+        scope: global
+        # 每轮自动注入的热记忆字节上限（进每一轮上下文，字节数就是长期成本）
+        hot: true
+        hotBytes: 2048
+        # 把"什么时候该写、该查"讲给模型听
+        protocol: true
+        # L0 时间片长度（天）；删除权的最小单位就是它
+        epochDays: 7
+        # 取回时的渲染策略：legend | plain | xml
+        render: legend

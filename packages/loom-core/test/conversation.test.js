@@ -16,8 +16,15 @@ import { apply } from '../../loom-dsh/index.js';
 function boot(dbPath) {
   const tools = new Map();
   const cleanups = [];
+  const sections = [];
   const ctx = {
     tools: { register: (d) => (tools.set(d.name, d), () => tools.delete(d.name)) },
+    systemPrompt: {
+      section(s) {
+        sections.push(s);
+        return () => {};
+      },
+    },
     effect(fn) {
       const d = fn();
       if (typeof d === 'function') cleanups.push(d);
@@ -26,18 +33,20 @@ function boot(dbPath) {
   };
   apply(ctx, { dbPath, budget: 200 });
   const call = (name, args = {}) => tools.get(name).execute(args, {});
-  return { call, cleanups, names: [...tools.keys()] };
+  return { call, cleanups, names: [...tools.keys()], sections };
 }
 
-test('会话自测：13 轮真实用法', async (t) => {
+test('会话自测：14 轮真实用法', async (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'loom-conv-'));
-  const { call, cleanups, names } = boot(path.join(dir, 'loom.db'));
+  const { call, cleanups, names, sections } = boot(path.join(dir, 'loom.db'));
 
   try {
-    await t.test('0. 八个工具都在', () => {
+    await t.test('0. 九个工具都在，且注册了热记忆 section', () => {
       assert.deepEqual(names.sort(), [
-        'memory_decay', 'memory_forget', 'memory_outline', 'memory_recall', 'memory_settle', 'memory_stats', 'memory_verify', 'memory_write',
+        'memory_decay', 'memory_forget', 'memory_hot', 'memory_outline', 'memory_recall',
+        'memory_settle', 'memory_stats', 'memory_verify', 'memory_write',
       ]);
+      assert.deepEqual(sections.map((x) => x.name).sort(), ['loom-hot-memory', 'loom-memory-protocol']);
     });
 
     await t.test('1. 写一条：汉字置信 + 无尾也接受', async () => {
@@ -150,6 +159,18 @@ test('会话自测：13 轮真实用法', async (t) => {
       const r = await call('memory_decay', {});
       assert.equal(r.applied, false);
       assert.ok(r.counts.keep >= 1);
+    });
+
+    await t.test('16. 热记忆：自动注入的内容里有规则，且受字节约束', async () => {
+      const hot = await call('memory_hot', {});
+      assert.equal(hot.injected, true);
+      assert.ok(hot.bytes > 0);
+      assert.ok(hot.text.includes('规则') || hot.text.includes('预发'), hot.text.slice(0, 80));
+
+      // section 的 text() 是每轮现算的，必须与 memory_hot 一致
+      const live = sections.find((x) => x.name === 'loom-hot-memory').text({});
+      assert.equal(live, hot.text);
+      assert.ok(hot.bytes <= 2048, `注入 ${hot.bytes} 字节，超了上限`);
     });
   } finally {
     for (const c of cleanups) c();

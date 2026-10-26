@@ -1,8 +1,9 @@
-﻿/**
+/**
  * LOOM 的 DSH 插件壳。
  *
- * 五个工具：写 / 读 / 结算 / 遗忘扫描 / 统计。
- * 全部走"最弱够用"的机制：模型自己决定何时调用，不做自动注入。
+ * 两块能力：
+ *   1. 自动注入：每轮固定注入一小块热记忆（与"想起来才查"互补）
+ *   2. 九个工具：写 / 读 / 目录 / 热记忆 / 结算 / 遗忘扫描 / 校验 / 遗忘单条 / 统计
  */
 
 import os from 'node:os';
@@ -15,6 +16,8 @@ import { recall } from './vendor/recall.js';
 import { render } from './vendor/render.js';
 import { settleTurn } from './vendor/settle.js';
 import { sweep } from './vendor/decay.js';
+import { buildHotMemory } from './vendor/hot.js';
+import { resolveDbPath } from './vendor/paths.js';
 import { Chronicle } from './vendor/chronicle.js';
 import { SqliteLedger } from './vendor/sqlite-ledger.js';
 
@@ -27,14 +30,29 @@ const OUT = {
 
 export const inject = ['tools'];
 
-/** @param {any} ctx @param {{dbPath?:string, budget?:number, render?:'legend'|'plain'|'xml'}} config */
+/** 热记忆默认字节上限：它进每一轮上下文，字节数就是长期成本 */
+const DEFAULT_HOT_BYTES = 2048;
+
+/** 使用协议：把"什么时候该写、该查"讲清楚，比让模型自己猜便宜得多 */
+const PROTOCOL = [
+  '## LOOM 记忆规则',
+  '- 用户说「记住 / 记一下 / 记着」→ 立刻调 memory_write；一行一个断言，句末用 。',
+  '- 问到过去的事（上次 / 之前 / 我们说 / 当时）→ 先 memory_recall 再回答，不要凭印象。',
+  '- 回答里用到记忆时，在末尾标 [#id]；事后可用 memory_settle 结算。',
+  '- 不确定有没有记过 → 先 memory_outline 看目录。',
+].join('\n');
+
+/** @param {any} ctx @param {{dbPath?:string, budget?:number, render?:'legend'|'plain'|'xml', epochDays?:number, hotBytes?:number, hot?:boolean}} config */
 export function apply(ctx, config = {}) {
   const budget = Number(config.budget ?? 300);
   const policy = config.render ?? 'legend';
+  const hotBytes = Number(config.hotBytes ?? DEFAULT_HOT_BYTES);
   const dbPath =
     config.dbPath && config.dbPath.trim()
       ? config.dbPath
-      : path.join(process.env.DSH_HOME ?? path.join(os.homedir(), '.dsh'), 'loom', 'loom.db');
+      : config.scope === 'workspace'
+        ? resolveDbPath({ scope: 'workspace', workspace: process.cwd() }).dbPath
+        : path.join(process.env.DSH_HOME ?? path.join(os.homedir(), '.dsh'), 'loom', 'loom.db');
 
   fs.mkdirSync(path.dirname(dbPath), { recursive: true });
   const ledger = new SqliteLedger(dbPath);
@@ -46,6 +64,37 @@ export function apply(ctx, config = {}) {
   let epoch = chronicle.currentEpoch({ everyDays: epochDays });
 
   ctx.effect(() => () => ledger.close());
+
+  const hotNow = () => buildHotMemory(ledger.active(), { maxBytes: hotBytes });
+
+  // ---- 自动注入：每轮都带一小块热记忆 ----
+  // 这是"替代 mnemon"的关键一块：记忆不该等模型想起来才查。
+  if (config.hot !== false && ctx.systemPrompt?.section) {
+    try {
+      const dispose = ctx.systemPrompt.section({
+        name: 'loom-hot-memory',
+        order: 90,
+        text: () => hotNow().text,
+      });
+      if (typeof dispose === 'function') ctx.effect(() => dispose);
+    } catch {
+      // 注入失败不能连累工具：宁可这轮没热记忆，也不能让记忆功能整个失效
+    }
+  }
+
+  // ---- 使用协议：告诉模型什么时候该写、该查 ----
+  if (config.protocol !== false && ctx.systemPrompt?.section) {
+    try {
+      const dispose = ctx.systemPrompt.section({
+        name: 'loom-memory-protocol',
+        order: 91,
+        text: PROTOCOL,
+      });
+      if (typeof dispose === 'function') ctx.effect(() => dispose);
+    } catch {
+      // 同上：注入是增强，不是前提
+    }
+  }
 
   // ---- 写 ----
   ctx.tools.register({
@@ -176,6 +225,18 @@ export function apply(ctx, config = {}) {
     async execute(args = {}) {
       const r = sweep(ledger, { apply: args.apply === true });
       return { applied: r.applied, counts: r.counts, rows: r.rows.slice(0, 20) };
+    },
+  });
+
+  // ---- 热记忆预览 ----
+  ctx.tools.register({
+    name: 'memory_hot',
+    description: '看这一轮被自动注入了什么（热记忆原文 + 统计），用来调 hotBytes 或验证注入是否生效。',
+    parameters: { type: 'object', properties: {} },
+    output: OUT,
+    async execute() {
+      const hot = hotNow();
+      return { injected: config.hot !== false, budgetBytes: hotBytes, bytes: hot.bytes, counts: hot.counts, omitted: hot.omitted, text: hot.text };
     },
   });
 
