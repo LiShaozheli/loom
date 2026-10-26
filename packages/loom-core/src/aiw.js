@@ -220,3 +220,12 @@ export function unigrams(text) {
   for (const run of s.matchAll(/[\p{Script=Han}]+/gu)) for (const ch of run[0]) out.add(ch);
   return [...out];
 }
+
+/** 题档标题：在标点处断开，别把「；」和半个词切进标题 */
+export function makeTitle(aiw, { max = 16 } = {}) {
+  const body = stripTail(String(aiw ?? "")).trim();
+  if (!body) return "";
+  const cut = body.split(/[；;，,。.、!！?？]/)[0].trim();
+  const base = cut.length >= 4 ? cut : body;
+  return [...base].slice(0, max).join("");
+}

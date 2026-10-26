@@ -11,7 +11,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 
 import { ingest } from './vendor/ingest.js';
-import { parseTail } from './vendor/aiw.js';
+import { parseTail, makeTitle } from './vendor/aiw.js';
 import { recall } from './vendor/recall.js';
 import { render } from './vendor/render.js';
 import { settleTurn } from './vendor/settle.js';
@@ -164,7 +164,7 @@ export function apply(ctx, config = {}) {
         epochId: 'ep-live',
         ledger,
         original: args.original,
-        title: args.line.slice(0, 12),
+        title: makeTitle(args.line),
         // 没写 #来源 时默认记成「会话」：工具调用天然来自当前对话，
         // 让使用者为了过校验去编一个来源，是把结构信息推给人填。
         source: { eventId: parseTail(args.line)?.source ?? '#会话' },
@@ -337,7 +337,7 @@ export function apply(ctx, config = {}) {
       const kind = args.kind ?? intent.kind;
 
       const doc = ledger.putDoc({
-        title: args.title ?? content.slice(0, 16),
+        title: args.title ?? makeTitle(content, { max: 24 }),
         body: content,
         tags: kind,
       });
@@ -351,7 +351,7 @@ export function apply(ctx, config = {}) {
         kind,
         epochId: 'ep-live',
         ledger,
-        title: content.slice(0, 12),
+        title: makeTitle(content),
         source: { eventId: '#会话' },
       });
       if (r.ok) {
