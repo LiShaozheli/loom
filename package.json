@@ -26,6 +26,7 @@
     "distill": "node tools/distill.mjs",
     "settle": "node tools/settle-eval.mjs",
     "dedupe": "node tools/dedupe.mjs",
+    "retrieval": "node tools/retrieval-eval.mjs",
     "reindex": "node tools/reindex.mjs",
     "check": "npm test && npm run verify"
   }
