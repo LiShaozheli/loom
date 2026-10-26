@@ -6,7 +6,11 @@
  *   两边必须成对出现：id 在 main 里缺失时选中会抛错。
  *
  * 数据：页面可能跑在 dsh-app:// 上，绝对不能用相对路径——从 __DSH_TRANSPORT__ 推导宿主 origin。
- * 写入：设置走 POST /loom/config，由宿主用 configEditor 持久化到 profile patch。
+ * 写入：设置走 POST /loom/config，会话隔离走 POST /loom/isolate，都由宿主用 configEditor 持久化。
+ *
+ * 样式：一份注入的 CSS（.lm-*）+ 少量内联。颜色全走宿主主题变量，
+ * 所以亮色/暗色跟随宿主，不需要自己做两套。内联样式做不到 hover/focus，
+ * 而设置界面好不好用一半靠这两样。
  */
 
 window.__ModuleLoader__.load({
@@ -15,23 +19,114 @@ window.__ModuleLoader__.load({
     const React = require('react');
     const h = React.createElement;
 
-    const C = {
-      wrap: { padding: '16px', font: 'inherit', color: 'inherit', overflow: 'auto', height: '100%', boxSizing: 'border-box' },
-      h1: { fontSize: 15, fontWeight: 600, margin: '0 0 4px' },
-      tabs: { display: 'flex', gap: 6, margin: '10px 0 12px', flexWrap: 'wrap', alignItems: 'center' },
-      tab: { fontSize: 12, padding: '4px 10px', borderRadius: 6, cursor: 'pointer', border: '1px solid rgba(128,128,128,.3)', background: 'transparent', color: 'inherit' },
-      tabOn: { fontSize: 12, padding: '4px 10px', borderRadius: 6, cursor: 'pointer', border: '1px solid rgba(128,128,128,.45)', background: 'rgba(37,99,235,.18)', color: 'inherit' },
-      card: { padding: '10px 12px', borderRadius: 8, background: 'rgba(128,128,128,.08)', marginBottom: 8 },
-      row: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8 },
-      label: { fontSize: 13 },
-      meta: { fontSize: 11, opacity: 0.6, marginTop: 3 },
-      text: { fontSize: 13, lineHeight: 1.55, wordBreak: 'break-word', whiteSpace: 'pre-wrap' },
-      btn: { fontSize: 12, padding: '4px 10px', borderRadius: 6, cursor: 'pointer', border: '1px solid rgba(128,128,128,.35)', background: 'transparent', color: 'inherit' },
-      input: { fontSize: 12, padding: '3px 6px', borderRadius: 6, border: '1px solid rgba(128,128,128,.35)', background: 'transparent', color: 'inherit', width: 88 },
-      empty: { fontSize: 13, opacity: 0.7, padding: '10px 0' },
-      err: { fontSize: 12, color: '#d97706', padding: '6px 0' },
-      ok: { fontSize: 12, color: '#16a34a', padding: '6px 0' },
-    };
+    // ---- 样式表 ----
+    const CSS = `
+.lm{--lm-fg1:var(--dsw-alias-label-primary,#1a1a1a);--lm-fg2:var(--dsw-alias-label-secondary,#555);--lm-fg3:var(--dsw-alias-label-tertiary,#8a8a8a);
+--lm-bg1:var(--dsw-alias-bg-layer-1,rgba(255,255,255,.72));--lm-bg2:var(--dsw-alias-bg-layer-2,rgba(127,127,127,.10));
+--lm-bd1:var(--dsw-alias-border-l1,rgba(127,127,127,.22));--lm-bd2:var(--dsw-alias-border-l2,rgba(127,127,127,.42));
+--lm-brand:var(--dsw-alias-brand-primary,#2563eb);--lm-ok:var(--dsw-alias-state-success-primary,#16a34a);
+--lm-warn:var(--dsw-alias-state-warn-primary,#d97706);--lm-err:var(--dsw-alias-state-error-primary,#dc2626);
+--lm-fill:var(--dsw-specific-sidebar-fill,var(--dsw-alias-bg-base,transparent));
+display:flex;flex-direction:column;height:100%;box-sizing:border-box;overflow-y:auto;overflow-x:hidden;
+font:inherit;font-size:13px;line-height:1.5;color:var(--lm-fg1);-webkit-font-smoothing:antialiased}
+.lm::-webkit-scrollbar{width:9px}.lm::-webkit-scrollbar-thumb{background:var(--lm-bd1);border-radius:9px;border:2px solid transparent;background-clip:content-box}
+.lm::-webkit-scrollbar-thumb:hover{background:var(--lm-bd2);background-clip:content-box}
+.lm-top{position:sticky;top:0;z-index:3;background:var(--lm-fill);padding:14px 14px 10px;border-bottom:1px solid var(--lm-bd1)}
+.lm-title{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.lm-title h1{margin:0;font-size:13.5px;font-weight:600;letter-spacing:.2px}
+.lm-sub{margin-top:2px;font-size:11px;color:var(--lm-fg3);font-variant-numeric:tabular-nums}
+.lm-tabs{display:flex;gap:2px;margin-top:10px;padding:2px;border-radius:9px;background:var(--lm-bg2);border:1px solid var(--lm-bd1)}
+.lm-tabs button{flex:1;min-width:0;border:0;background:transparent;color:var(--lm-fg2);font:inherit;font-size:11.5px;
+padding:4px 2px;border-radius:7px;cursor:pointer;transition:color .12s,background .12s;white-space:nowrap}
+.lm-tabs button:hover{color:var(--lm-fg1)}
+.lm-tabs button.on{background:var(--lm-bg1);color:var(--lm-fg1);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.10)}
+.lm-body{padding:12px 14px 20px;display:flex;flex-direction:column;gap:10px}
+.lm-group{margin-top:6px}
+.lm-group>h2{margin:0 0 6px;font-size:10.5px;font-weight:600;letter-spacing:.09em;color:var(--lm-fg3);text-transform:uppercase}
+.lm-card{border:1px solid var(--lm-bd1);border-radius:10px;background:var(--lm-bg1);overflow:hidden}
+.lm-card.pad{padding:10px 12px}
+.lm-row{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:10px 12px;flex-wrap:wrap}
+.lm-row+.lm-row{border-top:1px solid var(--lm-bd1)}
+.lm-row .txt{flex:1 1 130px;min-width:0}
+.lm-lab{font-size:12.5px;font-weight:500}
+.lm-hint{margin-top:2px;font-size:11px;line-height:1.45;color:var(--lm-fg3)}
+.lm-ctl{flex:0 0 auto;display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.lm-seg{display:inline-flex;padding:2px;gap:2px;border-radius:8px;background:var(--lm-bg2);border:1px solid var(--lm-bd1)}
+.lm-seg button{border:0;background:transparent;color:var(--lm-fg2);font:inherit;font-size:11.5px;padding:3px 9px;border-radius:6px;cursor:pointer;
+transition:color .12s,background .12s;white-space:nowrap}
+.lm-seg button:hover{color:var(--lm-fg1)}
+.lm-seg button.on{background:var(--lm-bg1);color:var(--lm-brand);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.10)}
+.lm-sw{position:relative;flex:0 0 auto;width:38px;height:21px;padding:0;border-radius:999px;border:1px solid var(--lm-bd2);
+background:var(--lm-bg2);cursor:pointer;transition:background .16s,border-color .16s}
+.lm-sw i{position:absolute;top:2px;left:2px;width:15px;height:15px;border-radius:50%;background:var(--lm-fg3);transition:left .16s,background .16s}
+.lm-sw.on{background:var(--lm-brand);border-color:transparent}
+.lm-sw.on i{left:20px;background:#fff}
+.lm-sw:focus-visible{outline:2px solid var(--lm-brand);outline-offset:2px}
+.lm-selectwrap{position:relative;flex:1 1 150px;min-width:0}
+.lm-selectwrap::after{content:'';position:absolute;right:11px;top:50%;width:5px;height:5px;pointer-events:none;
+border-right:1.6px solid var(--lm-fg3);border-bottom:1.6px solid var(--lm-fg3);transform:translateY(-70%) rotate(45deg)}
+.lm-select{appearance:none;-webkit-appearance:none;width:100%;box-sizing:border-box;font:inherit;font-size:12px;padding:6px 26px 6px 9px;
+border-radius:8px;border:1px solid var(--lm-bd1);background:var(--lm-bg1);color:var(--lm-fg1);cursor:pointer}
+.lm-select:hover{border-color:var(--lm-bd2)}
+.lm-select:focus{outline:none;border-color:var(--lm-brand);box-shadow:0 0 0 3px rgba(37,99,235,.14)}
+.lm-btn{font:inherit;font-size:11.5px;padding:5px 11px;border-radius:7px;border:1px solid var(--lm-bd1);
+background:var(--lm-bg2);color:var(--lm-fg1);cursor:pointer;transition:background .12s,border-color .12s;white-space:nowrap}
+.lm-btn:hover{background:var(--lm-bg1);border-color:var(--lm-bd2)}
+.lm-btn.pri{background:var(--lm-brand);border-color:transparent;color:#fff;font-weight:500}
+.lm-btn.pri:hover{filter:brightness(1.08)}
+.lm-btn:disabled{opacity:.45;cursor:not-allowed}
+.lm-btn.mini{padding:3px 7px;font-size:11px}
+.lm-in{width:100%;box-sizing:border-box;font:inherit;font-size:12px;padding:6px 9px;border-radius:8px;
+border:1px solid var(--lm-bd1);background:var(--lm-bg1);color:var(--lm-fg1)}
+.lm-in:focus{outline:none;border-color:var(--lm-brand);box-shadow:0 0 0 3px rgba(37,99,235,.14)}
+textarea.lm-in{min-height:96px;resize:vertical;line-height:1.55}
+.lm-chips{display:flex;flex-direction:column;gap:6px;padding:0 12px 12px}
+.lm-chip{display:flex;align-items:center;gap:8px;border:1px solid var(--lm-bd1);background:var(--lm-bg2);
+border-radius:8px;padding:6px 6px 6px 10px;min-width:0}
+.lm-chip .nm{flex:1;min-width:0;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lm-chip .id{font-size:10px;color:var(--lm-fg3);font-variant-numeric:tabular-nums}
+.lm-chip .x{border:0;background:transparent;color:var(--lm-fg3);font:inherit;font-size:14px;line-height:1;
+cursor:pointer;padding:0 5px;border-radius:5px}
+.lm-chip .x:hover{color:var(--lm-err);background:var(--lm-bg1)}
+.lm-tag{display:inline-block;font-size:10px;padding:1px 6px;border-radius:999px;border:1px solid var(--lm-bd1);
+color:var(--lm-fg3);white-space:nowrap}
+.lm-tag.now{color:var(--lm-brand);border-color:var(--lm-brand)}
+.lm-badge{font-size:10px;padding:1px 6px;border-radius:5px;background:var(--lm-bg2);color:var(--lm-fg2);white-space:nowrap}
+.lm-stat{display:flex;gap:8px}
+.lm-stat>div{flex:1;border:1px solid var(--lm-bd1);border-radius:10px;background:var(--lm-bg1);padding:9px 11px}
+.lm-stat .n{font-size:18px;font-weight:600;line-height:1.15;font-variant-numeric:tabular-nums}
+.lm-stat .k{font-size:10.5px;color:var(--lm-fg3)}
+.lm-meter{height:5px;border-radius:999px;background:var(--lm-bg2);overflow:hidden;margin-top:7px}
+.lm-meter i{display:block;height:100%;border-radius:999px;background:var(--lm-brand);transition:width .25s}
+.lm-kv{display:flex;justify-content:space-between;gap:10px;font-size:11.5px;padding:3px 0}
+.lm-kv .k{color:var(--lm-fg3)}
+.lm-kv .v{font-variant-numeric:tabular-nums;text-align:right}
+.lm-text{font-size:12.5px;line-height:1.6;word-break:break-word;white-space:pre-wrap}
+.lm-meta{font-size:10.5px;color:var(--lm-fg3);font-variant-numeric:tabular-nums}
+.lm-note{font-size:11.5px;padding:7px 10px;border-radius:8px;border:1px solid var(--lm-bd1);background:var(--lm-bg2)}
+.lm-note.ok{color:var(--lm-ok);border-color:var(--lm-ok)}
+.lm-note.err{color:var(--lm-err);border-color:var(--lm-err)}
+.lm-note.warn{color:var(--lm-warn);border-color:var(--lm-warn)}
+.lm-empty{padding:18px 4px;text-align:center;font-size:12px;color:var(--lm-fg3);line-height:1.7}
+.lm-foot{font-size:10.5px;color:var(--lm-fg3);line-height:1.6;padding-top:2px}
+.lm-anchor{scroll-margin-top:64px}
+`;
+
+    /** 注入样式；拿不到 document（Node 里跑契约测试）就静默跳过 */
+    function insertCss(css) {
+      try {
+        if (typeof document === 'undefined' || !document.head) return () => {};
+        const el = document.createElement('style');
+        el.setAttribute('data-loom-panel', '1');
+        el.textContent = css;
+        document.head.appendChild(el);
+        return () => {
+          try { el.remove(); } catch { /* 卸载时文档可能已经没了 */ }
+        };
+      } catch {
+        return () => {};
+      }
+    }
 
     /** 从传输层推导宿主地址：键名叫 streamBaseUrl 这种，猜不完，所以取所有字符串值 */
     function hostOrigin() {
@@ -56,6 +151,28 @@ window.__ModuleLoader__.load({
       return /^https?:$/.test(location.protocol) ? location.origin : null;
     }
 
+    /** 当前页 URL 里往往带着会话 id；带上就能在下拉框里预选「就是这个对话」 */
+    function currentSessionId(ids) {
+      try {
+        const href = String((typeof location !== 'undefined' && location.href) || '');
+        if (!href) return null;
+        let best = null;
+        for (const id of ids) {
+          if (!id) continue;
+          if (href.includes(id) && (!best || id.length > best.length)) best = id;
+        }
+        return best;
+      } catch {
+        return null;
+      }
+    }
+
+    const KIND_LABEL = {
+      rule: '规则', pref: '偏好', fact: '事实', proc: '流程', relation: '关系', decision: '决定', open: '待办',
+    };
+
+    const TABS = ['状态', '记忆', '归档', '文档', '设置'];
+
     function Icon({ size, active }) {
       const s = size || 18;
       return h(
@@ -73,7 +190,41 @@ window.__ModuleLoader__.load({
       );
     }
 
-    const TABS = ['状态', '记忆', '归档', '文档', '设置'];
+    // ---- 基础控件 ----
+
+    /** 一行设置：左边说人话，右边是控件 */
+    function Row({ label, hint, children }) {
+      return h('div', { className: 'lm-row' },
+        h('div', { className: 'txt' },
+          h('div', { className: 'lm-lab' }, label),
+          hint ? h('div', { className: 'lm-hint' }, hint) : null),
+        h('div', { className: 'lm-ctl' }, children));
+    }
+
+    /** 分组：一个标题 + 一张卡 */
+    function Group({ title, children }) {
+      return h('section', { className: 'lm-group' }, h('h2', null, title), children);
+    }
+
+    function Seg({ value, options, onChange }) {
+      return h('div', { className: 'lm-seg', role: 'group' },
+        options.map((o) => h('button', {
+          key: o.value,
+          type: 'button',
+          className: value === o.value ? 'on' : '',
+          onClick: () => onChange(o.value),
+        }, o.label)));
+    }
+
+    function Switch({ on, onChange, title }) {
+      return h('button', {
+        type: 'button',
+        className: 'lm-sw' + (on ? ' on' : ''),
+        title,
+        'aria-pressed': on,
+        onClick: () => onChange(!on),
+      }, h('i'));
+    }
 
     function Panel() {
       const seed = (typeof window !== 'undefined' && window.__LOOM_SEED__) || null;
@@ -87,6 +238,10 @@ window.__ModuleLoader__.load({
       const [docView, setDocView] = React.useState(null);
       const [docForm, setDocForm] = React.useState(null);
       const [importMsg, setImportMsg] = React.useState(null);
+      // 设置页的对话下拉：sessions 是宿主里所有对话，pick 是当前下拉选中的那个
+      const [sessions, setSessions] = React.useState(null);
+      const [sessErr, setSessErr] = React.useState(null);
+      const [pick, setPick] = React.useState('');
       const base = hostOrigin();
 
       const load = React.useCallback(() => {
@@ -101,7 +256,24 @@ window.__ModuleLoader__.load({
           .catch((e) => setState({ loading: false, data: seed, error: e.message }));
       }, [base, seed]);
 
+      const loadSessions = React.useCallback(() => {
+        if (!base) return;
+        setSessErr(null);
+        fetch(base + '/loom/sessions', { credentials: 'omit' })
+          .then((r) => r.json())
+          .then((r) => {
+            if (!r.ok) throw new Error(r.error || 'HTTP');
+            const list = r.sessions || [];
+            setSessions(list);
+            // 默认选中「当前这个对话」，省得人再去一长串里找自己
+            const now = currentSessionId(list.map((s) => s.id));
+            if (now) setPick((cur) => cur || now);
+          })
+          .catch((e) => setSessErr(e.message));
+      }, [base]);
+
       React.useEffect(() => { load(); }, [load]);
+      React.useEffect(() => { if (tab === '设置') loadSessions(); }, [tab, loadSessions]);
 
       const post = (pathname, payload) =>
         fetch(base + pathname, {
@@ -181,126 +353,196 @@ window.__ModuleLoader__.load({
         })
           .then((r) => r.json())
           .then((r) => {
-            setSaved(r.ok ? '已保存：' + key + '（部分设置需重启生效）' : '保存失败：' + r.error);
+            setSaved(r.ok ? '已保存' : '保存失败：' + r.error);
             if (r.ok) load();
+          })
+          .catch((e) => setSaved('保存失败：' + e.message));
+      };
+
+      /** 把一个对话加进 / 移出独立记忆名单 */
+      const isolate = (id, on) => {
+        if (!base) return;
+        const sid = String(id ?? '').trim();
+        if (!sid) return;
+        setSaved(null);
+        post('/loom/isolate', { id: sid, isolated: on })
+          .then((r) => {
+            if (!r.ok) { setSaved('保存失败：' + r.error); return; }
+            setSaved(on ? '已把「' + nameOf(sid) + '」设为独立记忆' : '「' + nameOf(sid) + '」已回到共享记忆');
+            if (on) setPick('');
+            load();
+            loadSessions();
           })
           .catch((e) => setSaved('保存失败：' + e.message));
       };
 
       const d = state.data;
       const cfg = (d && d.config) || {};
+      const allSessions = sessions || [];
+      const nameOf = (id) => {
+        const hit = allSessions.find((s) => s.id === id);
+        return hit ? hit.title : id.slice(0, 8);
+      };
 
-      const head = h('div', null,
-        h('div', { style: C.h1 }, 'LOOM 记忆'),
-        h('div', { style: C.meta },
+      // 当前对话：URL 里带了哪个 id 就是哪个
+      const nowId = currentSessionId(allSessions.map((s) => s.id));
+      const isolatedIds = (cfg.isolatedSessions || []).slice();
+      const isolatedRows = isolatedIds.map((id) => {
+        const hit = allSessions.find((s) => s.id === id);
+        return hit || { id, title: '（宿主里找不到这个对话）', short: id.slice(0, 8), messages: 0 };
+      });
+      // 下拉里只放还没被指定的对话
+      const pickable = allSessions.filter((s) => !isolatedIds.includes(s.id));
+
+      const head = h('div', { className: 'lm-top' },
+        h('div', { className: 'lm-title' },
+          h('h1', null, 'LOOM 记忆'),
+          h('button', { type: 'button', className: 'lm-btn mini', onClick: load, title: '重新读取' }, '刷新')),
+        h('div', { className: 'lm-sub' },
           d
-            ? (d.total || 0) + ' 条记忆 · ' + (d.archived || 0) + ' 条对话归档 · ' + ((d.docs && d.docs.length) || 0) + ' 篇文档'
-            : state.loading ? '读取中…' : '没有数据')
-      );
-
-      const tabbar = h('div', { style: C.tabs },
-        TABS.map((name) => h('button', {
-          key: name, type: 'button',
-          style: tab === name ? C.tabOn : C.tab,
-          onClick: () => setTab(name),
-        }, name)),
-        h('button', { style: C.btn, onClick: load, type: 'button' }, '刷新')
+            ? (d.total || 0) + ' 条记忆 · ' + (d.archived || 0) + ' 条原文 · ' + ((d.docs && d.docs.length) || 0) + ' 篇文档'
+            : state.loading ? '读取中…' : '没有数据'),
+        h('div', { className: 'lm-tabs', role: 'tablist' },
+          TABS.map((name) => h('button', {
+            key: name, type: 'button',
+            role: 'tab',
+            className: tab === name ? 'on' : '',
+            onClick: () => setTab(name),
+          }, name)))
       );
 
       let body = null;
 
       if (tab === '状态') {
-        body = h('div', null,
-          h('div', { style: C.card },
-            h('div', { style: C.label }, '本轮注入 ' + ((d && d.hot && d.hot.bytes) || 0) + ' 字节'),
-            h('div', { style: C.meta }, '规则 ' + ((d && d.hot && d.hot.rule) || 0) +
-              ' · 偏好 ' + ((d && d.hot && d.hot.pref) || 0) +
-              ' · 事实 ' + ((d && d.hot && d.hot.fact) || 0))),
-          h('div', { style: C.card },
-            h('div', { style: C.label }, '编年层'),
-            h('div', { style: C.meta }, '时间片 ' + ((d && d.epoch) || '—') +
-              ' · 哈希链 ' + ((d && d.verify && d.verify.ok) ? '完好' : '异常') +
-              ' · 事件 ' + ((d && d.verify && d.verify.events) || 0) +
-              ' · 归档 ' + ((d && d.archived) || 0))),
-          h('div', { style: C.card },
-            h('div', { style: C.label }, '自动记录'),
-            h('div', { style: C.meta }, (cfg.autoCapture ? '开（' + cfg.autoCaptureLevel + '）' : '关') +
-              ' · 作用域 ' + (cfg.scope || 'global') +
-              ' · 注入上限 ' + (cfg.hotBytes || 0) + ' 字节'))
-        );
+        const hot = (d && d.hot) || { bytes: 0, rule: 0, pref: 0, fact: 0 };
+        const cap = Number(cfg.hotBytes || 0) || 1;
+        const pct = Math.min(100, Math.round((Number(hot.bytes || 0) / cap) * 100));
+        const isolated = isolateSummary(cfg);
+        body = h('div', { className: 'lm-body' },
+          h('div', { className: 'lm-stat' },
+            h('div', null,
+              h('div', { className: 'n' }, String((d && d.total) || 0)),
+              h('div', { className: 'k' }, '条记忆')),
+            h('div', null,
+              h('div', { className: 'n' }, String((d && d.archived) || 0)),
+              h('div', { className: 'k' }, '条原文归档'))),
+
+          h('div', { className: 'lm-card pad' },
+            h('div', { className: 'lm-kv' },
+              h('span', { className: 'k' }, '本轮注入'),
+              h('span', { className: 'v' }, hot.bytes + ' / ' + cap + ' 字节')),
+            h('div', { className: 'lm-meter' }, h('i', { style: { width: pct + '%' } })),
+            h('div', { className: 'lm-meta', style: { marginTop: 6 } },
+              '规则 ' + hot.rule + ' · 偏好 ' + hot.pref + ' · 事实 ' + hot.fact)),
+
+          h('div', { className: 'lm-card pad' },
+            h('div', { className: 'lm-kv' },
+              h('span', { className: 'k' }, '编年层'),
+              h('span', { className: 'v' }, String((d && d.epoch) || '—'))),
+            h('div', { className: 'lm-kv' },
+              h('span', { className: 'k' }, '哈希链'),
+              h('span', { className: 'v', style: { color: d && d.verify && d.verify.ok ? 'var(--lm-ok)' : 'var(--lm-err)' } },
+                d && d.verify && d.verify.ok ? '完好' : '异常')),
+            h('div', { className: 'lm-kv' },
+              h('span', { className: 'k' }, '事件总数'),
+              h('span', { className: 'v' }, String((d && d.verify && d.verify.events) || 0)))),
+
+          h('div', { className: 'lm-card pad' },
+            h('div', { className: 'lm-kv' },
+              h('span', { className: 'k' }, '自动记录'),
+              h('span', { className: 'v' }, cfg.autoCapture ? '开（' + (cfg.autoCaptureLevel === 'strict' ? '严格' : '宽松') + '）' : '关')),
+            h('div', { className: 'lm-kv' },
+              h('span', { className: 'k' }, '记忆范围'),
+              h('span', { className: 'v' }, isolated))),
+
+          d && d.recent && d.recent.length
+            ? h('div', null,
+                h('div', { className: 'lm-group' }, h('h2', null, '最近的原文')),
+                d.recent.slice(0, 6).map((m, i) => h('div', { key: i, className: 'lm-card pad', style: { marginBottom: 6 } },
+                  h('div', { className: 'lm-meta' }, m.role === 'user' ? '你' : '模型'),
+                  h('div', { className: 'lm-text', style: { marginTop: 2 } },
+                    String(m.text || '').slice(0, 160) + (String(m.text || '').length > 160 ? '…' : '')))))
+            : null);
       }
 
       if (tab === '记忆') {
         const items = (d && d.items) || [];
-        body = items.length
-          ? items.map((it) => h('div', { key: it.id, style: C.card },
-              h('div', { style: C.text }, it.aiw),
-              h('div', { style: C.row },
-                h('span', { style: C.meta }, it.kind + ' · ' + it.id),
-                h('button', { type: 'button', style: C.btn, onClick: () => forget(it.id) }, '遗忘'))))
-          : h('div', { style: C.empty }, '还没有记忆。说「记住：…」或直接陈述事实即可。');
+        body = h('div', { className: 'lm-body' },
+          h('div', { className: 'lm-meta' },
+            isolatedIds.length
+              ? '下面是全部记忆（管理视图）。召回时按「记忆范围」过滤。'
+              : '每条都能单独遗忘；遗忘不是删除，原文和链还在。'),
+          items.length
+            ? items.map((it) => h('div', { key: it.id, className: 'lm-card pad' },
+                h('div', { style: { display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5, flexWrap: 'wrap' } },
+                  h('span', { className: 'lm-badge' }, KIND_LABEL[it.kind] || it.kind),
+                  h('span', { className: 'lm-meta' }, it.id)),
+                h('div', { className: 'lm-text' }, it.aiw),
+                h('div', { style: { display: 'flex', justifyContent: 'flex-end', marginTop: 6 } },
+                  h('button', { type: 'button', className: 'lm-btn mini', onClick: () => forget(it.id) }, '遗忘'))))
+            : h('div', { className: 'lm-empty' }, '还没有记忆。', h('br'), '说「记住：…」或直接陈述事实即可。'));
       }
 
       if (tab === '归档') {
         const list = hits || (d && d.recent) || [];
-        body = h('div', null,
-          h('div', { style: C.row },
+        body = h('div', { className: 'lm-body' },
+          h('div', { style: { display: 'flex', gap: 6 } },
             h('input', {
-              style: { ...C.input, flex: 1, width: 'auto' },
+              className: 'lm-in',
               placeholder: '在原文里搜…',
               value: q,
               onChange: (e) => setQ(e.target.value),
               onKeyDown: (e) => { if (e.key === 'Enter') search(q); },
             }),
-            h('button', { type: 'button', style: C.btn, onClick: () => search(q) }, '搜索')),
-          h('div', { style: C.meta }, '原文逐条保存，含寒暄与粘贴；共 ' + ((d && d.archived) || 0) + ' 条' +
+            h('button', { type: 'button', className: 'lm-btn', onClick: () => search(q) }, '搜索')),
+          h('div', { className: 'lm-meta' },
+            '原文逐条保存，含寒暄与粘贴；共 ' + ((d && d.archived) || 0) + ' 条' +
             (hits ? ' · 命中 ' + hits.length + ' 条' : '')),
           list.length
-            ? list.map((m, i) => h('div', { key: i, style: C.card },
-                h('div', { style: C.meta }, m.role),
-                h('div', { style: C.text }, m.text)))
-            : h('div', { style: C.empty }, q ? '没有匹配的原文。' : '还没有归档。')
-        );
+            ? list.map((m, i) => h('div', { key: i, className: 'lm-card pad' },
+                h('div', { className: 'lm-meta' }, m.role === 'user' ? '你' : '模型'),
+                h('div', { className: 'lm-text' }, m.text)))
+            : h('div', { className: 'lm-empty' }, q ? '没有匹配的原文。' : '还没有归档。'));
       }
 
       if (tab === '文档') {
         const docs = (d && d.docs) || [];
         const form = docForm
-          ? h('div', { style: { ...C.card, marginBottom: 12 } },
-              h('div', { style: C.row },
-                h('input', {
-                  style: { ...C.input, flex: 1, width: 'auto' },
-                  placeholder: '标题',
-                  value: docForm.title,
-                  onChange: (e) => setDocForm({ ...docForm, title: e.target.value }),
-                }),
-                h('input', {
-                  style: { ...C.input, width: 100 },
-                  placeholder: '标签',
-                  value: docForm.tags || '',
-                  onChange: (e) => setDocForm({ ...docForm, tags: e.target.value }),
-                })),
+          ? h('div', { className: 'lm-card pad', style: { display: 'flex', flexDirection: 'column', gap: 6 } },
+              h('input', {
+                className: 'lm-in',
+                placeholder: '标题',
+                value: docForm.title,
+                onChange: (e) => setDocForm({ ...docForm, title: e.target.value }),
+              }),
+              h('input', {
+                className: 'lm-in',
+                placeholder: '标签（可空）',
+                value: docForm.tags || '',
+                onChange: (e) => setDocForm({ ...docForm, tags: e.target.value }),
+              }),
               h('textarea', {
-                style: { width: '100%', minHeight: 90, marginTop: 6, padding: 6, borderRadius: 6, border: '1px solid rgba(128,128,128,.35)', background: 'transparent', color: 'inherit', font: 'inherit' },
+                className: 'lm-in',
+                placeholder: '正文',
                 value: docForm.body,
                 onChange: (e) => setDocForm({ ...docForm, body: e.target.value }),
               }),
-              h('div', { style: C.row },
-                h('button', { type: 'button', style: C.btn, onClick: saveDoc }, '保存'),
-                h('button', { type: 'button', style: C.btn, onClick: () => setDocForm(null) }, '取消')))
-          : h('div', { style: C.row },
-              h('span', { style: C.meta }, '共 ' + docs.length + ' 篇'),
-              h('button', { type: 'button', style: C.btn, onClick: () => setDocForm({ title: '', body: '', tags: '' }) }, '新建文档'));
+              h('div', { style: { display: 'flex', gap: 6, justifyContent: 'flex-end' } },
+                h('button', { type: 'button', className: 'lm-btn', onClick: () => setDocForm(null) }, '取消'),
+                h('button', { type: 'button', className: 'lm-btn pri', onClick: saveDoc }, '保存')))
+          : h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 } },
+              h('span', { className: 'lm-meta' }, '共 ' + docs.length + ' 篇'),
+              h('button', { type: 'button', className: 'lm-btn', onClick: () => setDocForm({ title: '', body: '', tags: '' }) }, '新建文档'));
 
-        body = h('div', null, form, docs.length
-          ? docs.map((doc) => h('div', { key: doc.id, style: C.card },
-              h('div', { style: C.row },
-                h('span', { style: C.label }, doc.title),
-                h('span', null,
-                  h('button', { type: 'button', style: C.btn, onClick: () => openDoc(doc.id) },
+        body = h('div', { className: 'lm-body' }, form, docs.length
+          ? docs.map((doc) => h('div', { key: doc.id, className: 'lm-card pad' },
+              h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 } },
+                h('span', { className: 'lm-lab', style: { flex: 1, minWidth: 0 } }, doc.title),
+                h('span', { style: { display: 'flex', gap: 4, flex: '0 0 auto' } },
+                  h('button', { type: 'button', className: 'lm-btn mini', onClick: () => openDoc(doc.id) },
                     docOpen === doc.id ? '收起' : '查看'),
                   h('button', {
-                    type: 'button', style: { ...C.btn, marginLeft: 6 },
+                    type: 'button', className: 'lm-btn mini',
                     onClick: () => {
                       if (!base) return;
                       fetch(base + '/loom/doc?id=' + encodeURIComponent(doc.id), { credentials: 'omit' })
@@ -308,174 +550,215 @@ window.__ModuleLoader__.load({
                         .then((r) => setDocForm(r.ok ? { id: doc.id, title: r.doc.title, body: r.doc.body, tags: r.doc.tags || '' } : { title: doc.title, body: '', tags: '' }));
                     },
                   }, '编辑'))),
-              h('div', { style: C.meta }, ((doc.tags || '') + ' · ' + doc.id).replace(/^ · /, '')),
+              (doc.tags || '') ? h('div', { className: 'lm-meta', style: { marginTop: 3 } }, doc.tags) : null,
               docOpen === doc.id && docView
                 ? docView.loading
-                  ? h('div', { style: C.meta }, '读取中…')
+                  ? h('div', { className: 'lm-meta', style: { marginTop: 6 } }, '读取中…')
                   : docView.error
-                    ? h('div', { style: C.err }, '读取失败：' + docView.error)
+                    ? h('div', { className: 'lm-note err', style: { marginTop: 6 } }, '读取失败：' + docView.error)
                     : h('div', null,
-                        h('div', { style: { ...C.text, marginTop: 8 } }, (docView.doc && docView.doc.body) || ''),
+                        h('div', { className: 'lm-text', style: { marginTop: 8 } }, (docView.doc && docView.doc.body) || ''),
                         (docView.revs || []).length > 1
                           ? h('div', { style: { marginTop: 10 } },
-                              h('div', { style: C.meta }, '历史版本（' + docView.revs.length + '）'),
-                              docView.revs.slice(1).map((r) => h('div', { key: r.rev, style: { ...C.card, marginTop: 6 } },
-                                h('div', { style: C.meta }, 'v' + r.rev + ' · ' + new Date(r.at).toLocaleString()),
-                                h('div', { style: C.text }, r.body))))
+                              h('div', { className: 'lm-meta' }, '历史版本（' + docView.revs.length + '）'),
+                              docView.revs.slice(1).map((r) => h('div', { key: r.rev, className: 'lm-card pad', style: { marginTop: 6, background: 'transparent' } },
+                                h('div', { className: 'lm-meta' }, 'v' + r.rev + ' · ' + new Date(r.at).toLocaleString()),
+                                h('div', { className: 'lm-text' }, r.body))))
                           : null)
                 : null))
-          : h('div', { style: C.empty }, '还没有项目文档。'));
+          : h('div', { className: 'lm-empty' }, '还没有项目文档。'));
       }
 
       if (tab === '设置') {
-        const savedHint = saved ? h('div', { style: String(saved).startsWith('已保存') ? C.ok : C.err }, saved) : null;
-
-        // 「关 / 开」两态
+        // 「开 / 关」——点一下就是开，不需要知道 true/false 怎么写
         const Toggle = ({ k, label, hint }) => {
           const on = !!cfg[k];
-          return h('div', { style: C.settingRow },
-            h('div', null,
-              h('div', { style: C.label }, label),
-              hint ? h('div', { style: C.meta }, hint) : null),
-            h('button', {
-              type: 'button',
-              style: on ? C.pillOn : C.pillOff,
-              onClick: () => save(k, !on),
-            }, on ? '开' : '关'));
+          return h(Row, { label, hint }, h(Switch, { on, onChange: (v) => save(k, v), title: on ? '点一下关掉' : '点一下打开' }));
         };
 
         // 多选一：点一下就切，不用打字
-        const Choice = ({ k, label, hint, options }) => {
-          const cur = cfg[k];
-          return h('div', { style: C.settingRow },
-            h('div', null,
-              h('div', { style: C.label }, label),
-              hint ? h('div', { style: C.meta }, hint) : null),
-            h('div', { style: { display: 'flex', gap: 6 } },
-              options.map((o) => h('button', {
-                key: o.value,
-                type: 'button',
-                style: cur === o.value ? C.pillOn : C.pillOff,
-                onClick: () => save(k, o.value),
-              }, o.label))));
-        };
+        const Choice = ({ k, label, hint, options }) =>
+          h(Row, { label, hint }, h(Seg, { value: cfg[k], options, onChange: (v) => save(k, v) }));
 
         // 数字：给几档常用值，也允许手填
         const Amount = ({ k, label, hint, unit, presets }) => {
           const cur = draft[k] != null ? draft[k] : (cfg[k] ?? '');
-          return h('div', { style: C.settingRow },
-            h('div', null,
-              h('div', { style: C.label }, label),
-              hint ? h('div', { style: C.meta }, hint) : null),
-            h('div', { style: { display: 'flex', gap: 6, alignItems: 'center' } },
-              h('input', {
-                style: C.input, type: 'number', value: cur,
-                onChange: (e) => setDraft({ ...draft, [k]: Number(e.target.value) }),
-                onBlur: () => save(k, Number(draft[k] ?? cfg[k])),
-              }),
-              h('span', { style: C.meta }, unit),
-              (presets || []).map((p) => h('button', {
-                key: p, type: 'button', style: C.pillOff,
-                onClick: () => { setDraft({ ...draft, [k]: p }); save(k, p); },
-              }, String(p)))));
+          return h(Row, { label, hint },
+            h('input', {
+              className: 'lm-in', style: { width: 78 }, type: 'number', value: cur,
+              onChange: (e) => setDraft({ ...draft, [k]: Number(e.target.value) }),
+              onBlur: () => save(k, Number(draft[k] ?? cfg[k])),
+            }),
+            h('span', { className: 'lm-meta' }, unit),
+            (presets || []).map((p) => h('button', {
+              key: p, type: 'button', className: 'lm-btn mini',
+              onClick: () => { setDraft({ ...draft, [k]: p }); save(k, p); },
+            }, String(p))));
         };
 
-        return h('div', null,
-          savedHint,
+        const note = saved
+          ? h('div', { className: 'lm-note ' + (String(saved).startsWith('已') ? 'ok' : 'err') }, saved)
+          : null;
 
-          h('div', { style: C.groupTitle }, '记忆范围'),
-          h(Choice, {
-            k: 'memoryScope', label: '谁能看到这条记忆',
-            hint: '共享：所有会话共用一份。独立：每个会话只看自己写的 + 公共的。',
-            options: [{ value: 'shared', label: '共享' }, { value: 'session', label: '独立' }],
-          }),
-          h(Choice, {
-            k: 'scope', label: '记忆存在哪',
-            hint: '全局：跟着你走。工作区：只属于当前目录，换个目录就是另一份。',
-            options: [{ value: 'global', label: '全局' }, { value: 'workspace', label: '工作区' }],
-          }),
+        // —— 对话下拉 + 添加 ——
+        const pickOptions = h('option', { value: '' }, pickable.length ? '选一个对话…' : '没有可选的对话');
+        const selectEl = h('div', { className: 'lm-selectwrap' },
+          h('select', {
+            className: 'lm-select',
+            value: pick,
+            disabled: !pickable.length,
+            onChange: (e) => setPick(e.target.value),
+            title: '这里列出宿主里的对话',
+          },
+            pickOptions,
+            pickable.map((s) => h('option', { key: s.id, value: s.id },
+              (s.id === nowId ? '当前 · ' : '') + s.title + '（' + s.short + '）'
+              + (s.messages ? ' · ' + s.messages + ' 条' : '')))));
 
-          h('div', { style: C.groupTitle }, '每轮注入'),
-          h(Toggle, { k: 'hot', label: '每轮带上记忆', hint: '关掉后模型得自己想起来查。' }),
-          h(Amount, {
-            k: 'hotBytes', label: '注入上限', unit: '字节',
-            hint: '它进每一轮上下文，这个数字就是长期成本。约 3 字节 = 1 个汉字。',
-            presets: [1024, 2048, 4096],
-          }),
-          h(Toggle, { k: 'protocol', label: '带上使用说明', hint: '告诉模型什么时候该写、什么时候该查。' }),
+        const picker = h('div', { style: { display: 'flex', gap: 6, padding: '0 12px 10px', alignItems: 'center' } },
+          selectEl,
+          h('button', {
+            type: 'button',
+            className: 'lm-btn pri',
+            disabled: !pick,
+            onClick: () => isolate(pick, true),
+          }, '添加'));
 
-          h('div', { style: C.groupTitle }, '自动记录'),
-          h(Toggle, { k: 'autoCapture', label: '从对话里自动记', hint: '你说的事实、偏好会自己进记忆，不用特意吩咐。' }),
-          h(Choice, {
-            k: 'autoCaptureLevel', label: '记多宽',
-            hint: '宽松：连偏好和项目习惯一起记。严格：只认端口、路径、版本这类硬事实。',
-            options: [{ value: 'normal', label: '宽松' }, { value: 'strict', label: '严格' }],
-          }),
+        const pickerNote = sessErr
+          ? h('div', { className: 'lm-note warn', style: { margin: '0 12px 10px' } },
+              '读不到对话列表（' + sessErr + '）。',
+              h('button', { type: 'button', className: 'lm-btn mini', style: { marginLeft: 6 }, onClick: loadSessions }, '重试'))
+          : sessions === null
+            ? h('div', { className: 'lm-meta', style: { padding: '0 12px 10px' } }, '读取对话列表…')
+            : null;
 
-          h('div', { style: C.groupTitle }, '存储'),
-          h('div', { style: C.settingRow },
-            h('div', null,
-              h('div', { style: C.label }, '库文件路径'),
-              h('div', { style: C.meta }, '留空用默认位置。换路径等于换一个空库，旧数据不会自动搬过去。')),
-            h('div', { style: { display: 'flex', gap: 6 } },
-              h('input', {
-                style: { ...C.input, width: 190 },
-                placeholder: '默认',
-                value: draft.dbPath != null ? draft.dbPath : '',
-                onChange: (e) => setDraft({ ...draft, dbPath: e.target.value }),
+        const chipList = isolatedRows.length
+          ? h('div', { className: 'lm-chips' },
+              isolatedRows.map((s) => h('div', { key: s.id, className: 'lm-chip' },
+                h('span', { className: 'nm', title: s.id }, s.title),
+                h('span', { className: 'id' }, s.short || String(s.id).slice(0, 8)),
+                s.id === nowId ? h('span', { className: 'lm-tag now' }, '当前') : null,
+                h('button', {
+                  type: 'button', className: 'x', title: '移出独立记忆',
+                  onClick: () => isolate(s.id, false),
+                }, '×'))))
+          : h('div', { className: 'lm-empty', style: { padding: '0 12px 14px' } }, '还没有指定。所有对话共用一份记忆。');
+
+        const nowHint = nowId
+          ? h('div', { className: 'lm-note', style: { margin: '0 12px 10px' } },
+              '你现在这个对话是 ' + nameOf(nowId) + '（' + nowId.slice(0, 8) + '），下拉框已经预选它了。点「添加」就设成独立。')
+          : null;
+
+        return h('div', { className: 'lm-body' },
+          note,
+
+          h(Group, { title: '记忆范围' },
+            h('div', { className: 'lm-card' },
+              h(Choice, {
+                k: 'memoryScope', label: '没列出来的对话',
+                hint: '共享：所有对话共用一份记忆。独立：每个对话只看自己写的 + 公共的。下面单独指定的优先。',
+                options: [{ value: 'shared', label: '共享' }, { value: 'session', label: '独立' }],
               }),
-              h('button', { type: 'button', style: C.pillOff, onClick: () => save('dbPath', draft.dbPath || '') }, '保存'))),
+              h('div', { className: 'lm-row', style: { borderTop: '1px solid var(--lm-bd1)' } },
+                h('div', { className: 'txt' },
+                  h('div', { className: 'lm-lab' }, '单独指定某些对话独立'),
+                  h('div', { className: 'lm-hint' }, '下面这些对话记的东西，别的对话看不到。适合把某件事关在一个对话里。'))),
+              nowHint,
+              picker,
+              pickerNote,
+              chipList)),
 
-          h('div', { style: C.groupTitle }, '高级'),
-          h(Choice, {
-            k: 'render', label: '取回时的排版',
-            hint: '带图例：附一张符号说明。纯文字：不要符号。结构化：给程序读的。',
-            options: [{ value: 'legend', label: '带图例' }, { value: 'plain', label: '纯文字' }, { value: 'xml', label: '结构化' }],
-          }),
-          h(Amount, {
-            k: 'budget', label: '单次取回的预算', unit: 'token',
-            hint: '模型主动查一次最多拿多少。',
-            presets: [200, 300, 600],
-          }),
-          h(Amount, {
-            k: 'epochDays', label: '时间片长度', unit: '天',
-            hint: '删除的最小单位：删一段时间片 = 整段不可读，链仍可验。',
-            presets: [7, 30],
-          }),
+          h(Group, { title: '每轮注入' },
+            h('div', { className: 'lm-card' },
+              h(Toggle, { k: 'hot', label: '每轮带上记忆', hint: '关掉后模型得自己想起来查。' }),
+              h(Amount, {
+                k: 'hotBytes', label: '注入上限', unit: '字节',
+                hint: '它进每一轮上下文，这个数字就是长期成本。约 3 字节 = 1 个汉字。',
+                presets: [1024, 2048, 4096],
+              }),
+              h(Toggle, { k: 'protocol', label: '带上使用说明', hint: '告诉模型什么时候该写、什么时候该查。' }))),
 
-          h('div', { style: C.groupTitle }, '备份'),
-          h('div', { style: C.settingRow },
-            h('div', null,
-              h('div', { style: C.label }, '导出 / 导入'),
-              h('div', { style: C.meta }, 'ZIP 里是记忆、文档、文档历史、关系边；不含密钥。')),
-            h('div', { style: { display: 'flex', gap: 6, alignItems: 'center' } },
-              h('button', {
-                type: 'button', style: C.pillOff,
-                onClick: () => { if (base) window.open(base + '/loom/export.zip', '_blank'); },
-              }, '下载'),
-              h('input', {
-                type: 'file', accept: '.zip', style: { fontSize: 11, width: 150 },
-                onChange: (e) => importZip(e.target.files && e.target.files[0]),
-              }))),
-          importMsg ? h('div', { style: String(importMsg).startsWith('导入完成') ? C.ok : C.err }, importMsg) : null,
-          h('div', { style: C.meta }, '改动立即生效并写进配置；带 * 的项需要重启 DSH。'),
-        );
+          h(Group, { title: '自动记录' },
+            h('div', { className: 'lm-card' },
+              h(Toggle, { k: 'autoCapture', label: '从对话里自动记', hint: '你说的事实、偏好会自己进记忆，不用特意吩咐。' }),
+              h(Choice, {
+                k: 'autoCaptureLevel', label: '记多宽',
+                hint: '宽松：连偏好和项目习惯一起记。严格：只认端口、路径、版本这类硬事实。',
+                options: [{ value: 'normal', label: '宽松' }, { value: 'strict', label: '严格' }] }))),
+
+          h(Group, { title: '存储' },
+            h('div', { className: 'lm-card' },
+              h(Choice, {
+                k: 'scope', label: '记忆存在哪',
+                hint: '全局：跟着你走。工作区：只属于当前目录，换个目录就是另一份。',
+                options: [{ value: 'global', label: '全局' }, { value: 'workspace', label: '工作区' }] }),
+              h(Row, {
+                label: '库文件路径',
+                hint: '留空用默认位置。换路径等于换一个空库，旧数据不会自动搬过去。',
+              },
+                h('input', {
+                  className: 'lm-in', style: { width: 168 },
+                  placeholder: '默认',
+                  value: draft.dbPath != null ? draft.dbPath : '',
+                  onChange: (e) => setDraft({ ...draft, dbPath: e.target.value }),
+                }),
+                h('button', { type: 'button', className: 'lm-btn', onClick: () => save('dbPath', draft.dbPath || '') }, '保存')))),
+
+          h(Group, { title: '高级' },
+            h('div', { className: 'lm-card' },
+              h(Choice, {
+                k: 'render', label: '取回时的排版',
+                hint: '带图例：附一张符号说明。纯文字：不要符号。结构化：给程序读的。',
+                options: [{ value: 'legend', label: '带图例' }, { value: 'plain', label: '纯文字' }, { value: 'xml', label: '结构化' }] }),
+              h(Amount, {
+                k: 'budget', label: '单次取回的预算', unit: 'token',
+                hint: '模型主动查一次最多拿多少。',
+                presets: [200, 300, 600] }),
+              h(Amount, {
+                k: 'epochDays', label: '时间片长度', unit: '天',
+                hint: '删除的最小单位：删一段时间片 = 整段不可读，链仍可验。',
+                presets: [7, 30] }))),
+
+          h(Group, { title: '备份' },
+            h('div', { className: 'lm-card' },
+              h(Row, {
+                label: '导出 / 导入',
+                hint: 'ZIP 里是记忆、文档、文档历史、关系边；不含密钥。',
+              },
+                h('button', {
+                  type: 'button', className: 'lm-btn',
+                  onClick: () => { if (base) window.open(base + '/loom/export.zip', '_blank'); },
+                }, '下载'),
+                h('input', {
+                  type: 'file', accept: '.zip', style: { fontSize: 11, width: 132 },
+                  onChange: (e) => importZip(e.target.files && e.target.files[0]),
+                })))),
+
+          importMsg ? h('div', { className: 'lm-note ' + (String(importMsg).startsWith('导入完成') ? 'ok' : 'err') }, importMsg) : null,
+          h('div', { className: 'lm-foot' }, '改动立即生效并写进配置。注入类的改动要等下一轮才看得到。'));
       }
 
-      return h('div', { style: C.wrap },
+      return h('div', { className: 'lm' },
         head,
-        tabbar,
         state.error === 'desktop-mode'
-          ? h('div', { style: C.err }, '读不到宿主地址，面板只能显示离线内容。')
+          ? h('div', { className: 'lm-body' }, h('div', { className: 'lm-note warn' }, '读不到宿主地址，面板只能显示离线内容。'))
           : state.error
-            ? h('div', { style: C.err },
-                '刷新失败：' + state.error +
-                '（推导地址 ' + (base || '无') + '；若持续失败，重启 DSH 后看 ~/.dsh/loom/hook-errors.log）')
+            ? h('div', { className: 'lm-body' },
+                h('div', { className: 'lm-note err' },
+                  '刷新失败：' + state.error + '（推导地址 ' + (base || '无') + '）',
+                  h('br'),
+                  '若持续失败，重启 DSH 后看 ~/.dsh/loom/hook-errors.log'))
             : null,
         body
       );
     }
 
+    /** 状态页那句「记忆范围」 */
+    function isolateSummary(cfg) {
+      const n = (cfg.isolatedSessions || []).length;
+      if (cfg.memoryScope === 'session') return '全部独立' + (n ? '（另点名 ' + n + ' 个）' : '');
+      return n ? '共享 + ' + n + ' 个独立对话' : '全部共享';
+    }
 
     // 回合尾部：每轮回复下方一行，显示 LOOM 当前体量（每 30 秒最多取一次）
     let tailCache = { at: 0, data: null };
@@ -517,6 +800,14 @@ window.__ModuleLoader__.load({
     return {
       inject: ['slots'],
       apply(ctx) {
+        // 样式挂在 Client run 的生命周期上，插件卸了就跟着走
+        const disposeCss = insertCss(CSS);
+        try {
+          if (typeof ctx.effect === 'function') ctx.effect(() => disposeCss);
+        } catch {
+          // 拿不到 effect 就算了，样式已经进去了
+        }
+
         ctx.slots.inject('sidebar.panellist', () =>
           ctx.slots.register({ name: 'sidebar.panellist', id: 'loom', order: 40, label: () => 'LOOM 记忆' }, Icon)
         );
