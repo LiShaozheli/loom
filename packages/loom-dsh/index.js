@@ -23,7 +23,7 @@ import { pickDurable } from './vendor/autocapture.js';
 import { archiveMessages, messageText, messageKey } from './vendor/archive.js';
 import { runLoomCommand } from './vendor/command.js';
 import { Chronicle } from './vendor/chronicle.js';
-import { exportBundle, bundleToZip } from './vendor/bundle.js';
+import { exportBundle, bundleToZip, importBundle, zipToBundle } from './vendor/bundle.js';
 import { SqliteLedger } from './vendor/sqlite-ledger.js';
 
 const text = (s) => [{ type: 'text', text: String(s) }];
@@ -512,6 +512,87 @@ export function apply(ctx, config = {}) {
           return reply(200, { ok: true, key, value, note: '已保存；部分设置需要重启或刷新页面生效' });
         } catch (e) {
           return reply(500, { ok: false, error: String(e?.message ?? e) });
+        }
+      },
+    });
+
+    // 写操作统一入口：/loom/forget、/loom/doc-save、/loom/import
+    const readBody = async (req) => {
+      const chunks = [];
+      for await (const chunk of req) chunks.push(chunk);
+      return Buffer.concat(chunks);
+    };
+
+    web.register({
+      kind: 'exact',
+      path: '/loom/forget',
+      handler: async (req, res) => {
+        const cors = { 'access-control-allow-origin': '*', 'content-type': 'application/json; charset=utf-8' };
+        if (req?.method === 'OPTIONS') {
+          res.writeHead(204, { ...cors, 'access-control-allow-methods': 'POST, OPTIONS' });
+          res.end();
+          return;
+        }
+        const reply = (code, obj) => { res.writeHead(code, cors); res.end(JSON.stringify(obj)); };
+        try {
+          const body = JSON.parse((await readBody(req)).toString('utf8') || '{}');
+          const key = String(body.id ?? '').trim();
+          const claim = ledger.get(key) ?? ledger.active().find((c) => c.id.startsWith(key));
+          if (!claim) return reply(404, { ok: false, error: '找不到这条记忆' });
+          ledger.supersede(claim.id, null, body.reason ?? '面板删除');
+          for (const d of ledger.docsByBody(claim.body)) ledger.setDocCold(d.id, true);
+          chronicle.append(epoch, { forget: claim.id, reason: body.reason ?? '面板删除', at: Date.now() });
+          return reply(200, { ok: true, id: claim.id.slice(0, 8) });
+        } catch (e) {
+          return reply(500, { ok: false, error: String(e?.message ?? e) });
+        }
+      },
+    });
+
+    web.register({
+      kind: 'exact',
+      path: '/loom/doc-save',
+      handler: async (req, res) => {
+        const cors = { 'access-control-allow-origin': '*', 'content-type': 'application/json; charset=utf-8' };
+        if (req?.method === 'OPTIONS') {
+          res.writeHead(204, { ...cors, 'access-control-allow-methods': 'POST, OPTIONS' });
+          res.end();
+          return;
+        }
+        const reply = (code, obj) => { res.writeHead(code, cors); res.end(JSON.stringify(obj)); };
+        try {
+          const body = JSON.parse((await readBody(req)).toString('utf8') || '{}');
+          const title = String(body.title ?? '').trim();
+          const text = String(body.body ?? '');
+          if (!title) return reply(400, { ok: false, error: '标题不能为空' });
+          if (!text.trim()) return reply(400, { ok: false, error: '正文不能为空' });
+          const doc = ledger.putDoc({ id: body.id || undefined, title, body: text, tags: body.tags ?? '' });
+          chronicle.append(epoch, { doc: doc.id, title: doc.title, at: Date.now() });
+          return reply(200, { ok: true, id: doc.id, title: doc.title, chars: doc.body.length });
+        } catch (e) {
+          return reply(500, { ok: false, error: String(e?.message ?? e) });
+        }
+      },
+    });
+
+    web.register({
+      kind: 'exact',
+      path: '/loom/import',
+      handler: async (req, res) => {
+        const cors = { 'access-control-allow-origin': '*', 'content-type': 'application/json; charset=utf-8' };
+        if (req?.method === 'OPTIONS') {
+          res.writeHead(204, { ...cors, 'access-control-allow-methods': 'POST, OPTIONS' });
+          res.end();
+          return;
+        }
+        const reply = (code, obj) => { res.writeHead(code, cors); res.end(JSON.stringify(obj)); };
+        try {
+          const buf = await readBody(req);
+          if (!buf.length) return reply(400, { ok: false, error: '空文件' });
+          const counts = importBundle(ledger, zipToBundle(buf));
+          return reply(200, { ok: true, counts });
+        } catch (e) {
+          return reply(400, { ok: false, error: String(e?.message ?? e) });
         }
       },
     });

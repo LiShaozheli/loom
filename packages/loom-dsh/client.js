@@ -101,6 +101,8 @@ window.__ModuleLoader__.load({
       const [hits, setHits] = React.useState(null);
       const [docOpen, setDocOpen] = React.useState(null);
       const [docView, setDocView] = React.useState(null);
+      const [docForm, setDocForm] = React.useState(null);
+      const [importMsg, setImportMsg] = React.useState(null);
       const base = hostOrigin();
 
       const load = React.useCallback(() => {
@@ -116,6 +118,52 @@ window.__ModuleLoader__.load({
       }, [base, seed]);
 
       React.useEffect(() => { load(); }, [load]);
+
+      const post = (pathname, payload) =>
+        fetch(base + pathname, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          credentials: 'omit',
+          body: JSON.stringify(payload),
+        }).then((r) => r.json());
+
+      const forget = (id) => {
+        if (!base) return;
+        if (typeof window.confirm === 'function' && !window.confirm('让这条记忆失效？（不物理删除，可回查）')) return;
+        post('/loom/forget', { id, reason: '面板删除' })
+          .then((r) => { if (r.ok) load(); else window.alert('删除失败：' + r.error); })
+          .catch((e) => window.alert('删除失败：' + e.message));
+      };
+
+      const saveDoc = () => {
+        if (!base || !docForm) return;
+        post('/loom/doc-save', { id: docForm.id, title: docForm.title, body: docForm.body, tags: docForm.tags })
+          .then((r) => {
+            if (!r.ok) { window.alert('保存失败：' + r.error); return; }
+            setDocForm(null);
+            load();
+          })
+          .catch((e) => window.alert('保存失败：' + e.message));
+      };
+
+      const importZip = (file) => {
+        if (!base || !file) return;
+        file.arrayBuffer()
+          .then((buf) =>
+            fetch(base + '/loom/import', {
+              method: 'POST',
+              headers: { 'content-type': 'application/octet-stream' },
+              credentials: 'omit',
+              body: buf,
+            })
+          )
+          .then((r) => r.json())
+          .then((r) => {
+            setImportMsg(r.ok ? '导入完成：' + JSON.stringify(r.counts) : '导入失败：' + r.error);
+            if (r.ok) load();
+          })
+          .catch((e) => setImportMsg('导入失败：' + e.message));
+      };
 
       const openDoc = (id) => {
         if (!base) return;
@@ -203,7 +251,9 @@ window.__ModuleLoader__.load({
         body = items.length
           ? items.map((it) => h('div', { key: it.id, style: C.card },
               h('div', { style: C.text }, it.aiw),
-              h('div', { style: C.meta }, it.kind + ' · ' + it.id)))
+              h('div', { style: C.row },
+                h('span', { style: C.meta }, it.kind + ' · ' + it.id),
+                h('button', { type: 'button', style: C.btn, onClick: () => forget(it.id) }, '遗忘'))))
           : h('div', { style: C.empty }, '还没有记忆。说「记住：…」或直接陈述事实即可。');
       }
 
@@ -231,12 +281,49 @@ window.__ModuleLoader__.load({
 
       if (tab === '文档') {
         const docs = (d && d.docs) || [];
-        body = docs.length
+        const form = docForm
+          ? h('div', { style: { ...C.card, marginBottom: 12 } },
+              h('div', { style: C.row },
+                h('input', {
+                  style: { ...C.input, flex: 1, width: 'auto' },
+                  placeholder: '标题',
+                  value: docForm.title,
+                  onChange: (e) => setDocForm({ ...docForm, title: e.target.value }),
+                }),
+                h('input', {
+                  style: { ...C.input, width: 100 },
+                  placeholder: '标签',
+                  value: docForm.tags || '',
+                  onChange: (e) => setDocForm({ ...docForm, tags: e.target.value }),
+                })),
+              h('textarea', {
+                style: { width: '100%', minHeight: 90, marginTop: 6, padding: 6, borderRadius: 6, border: '1px solid rgba(128,128,128,.35)', background: 'transparent', color: 'inherit', font: 'inherit' },
+                value: docForm.body,
+                onChange: (e) => setDocForm({ ...docForm, body: e.target.value }),
+              }),
+              h('div', { style: C.row },
+                h('button', { type: 'button', style: C.btn, onClick: saveDoc }, '保存'),
+                h('button', { type: 'button', style: C.btn, onClick: () => setDocForm(null) }, '取消')))
+          : h('div', { style: C.row },
+              h('span', { style: C.meta }, '共 ' + docs.length + ' 篇'),
+              h('button', { type: 'button', style: C.btn, onClick: () => setDocForm({ title: '', body: '', tags: '' }) }, '新建文档'));
+
+        body = h('div', null, form, docs.length
           ? docs.map((doc) => h('div', { key: doc.id, style: C.card },
               h('div', { style: C.row },
                 h('span', { style: C.label }, doc.title),
-                h('button', { type: 'button', style: C.btn, onClick: () => openDoc(doc.id) },
-                  docOpen === doc.id ? '收起' : '查看')),
+                h('span', null,
+                  h('button', { type: 'button', style: C.btn, onClick: () => openDoc(doc.id) },
+                    docOpen === doc.id ? '收起' : '查看'),
+                  h('button', {
+                    type: 'button', style: { ...C.btn, marginLeft: 6 },
+                    onClick: () => {
+                      if (!base) return;
+                      fetch(base + '/loom/doc?id=' + encodeURIComponent(doc.id), { credentials: 'omit' })
+                        .then((r) => r.json())
+                        .then((r) => setDocForm(r.ok ? { id: doc.id, title: r.doc.title, body: r.doc.body, tags: r.doc.tags || '' } : { title: doc.title, body: '', tags: '' }));
+                    },
+                  }, '编辑'))),
               h('div', { style: C.meta }, ((doc.tags || '') + ' · ' + doc.id).replace(/^ · /, '')),
               docOpen === doc.id && docView
                 ? docView.loading
@@ -253,7 +340,7 @@ window.__ModuleLoader__.load({
                                 h('div', { style: C.text }, r.body))))
                           : null)
                 : null))
-          : h('div', { style: C.empty }, '还没有项目文档。');
+          : h('div', { style: C.empty }, '还没有项目文档。'));
       }
 
       if (tab === '设置') {
@@ -286,6 +373,13 @@ window.__ModuleLoader__.load({
               onClick: () => { if (base) window.open(base + '/loom/export.zip', '_blank'); },
             }, '下载记忆包 ZIP')),
           h('div', { style: C.meta }, '包含记忆、文档、文档历史与关系边；不含密钥。'),
+          h('div', { style: C.row },
+            h('span', { style: C.label }, '导入记忆包'),
+            h('input', {
+              type: 'file', accept: '.zip',
+              onChange: (e) => importZip(e.target.files && e.target.files[0]),
+            })),
+          importMsg ? h('div', { style: String(importMsg).startsWith('导入完成') ? C.ok : C.err }, importMsg) : null,
           h('div', { style: C.meta }, '改动会写进 profile 的 loom-memory 行；部分键需要重启生效。')
         );
       }
