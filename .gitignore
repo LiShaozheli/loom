@@ -1,4 +1,7 @@
-node_modules/
+﻿node_modules/
+# 例外：插件把 schema 库 vendor 进来，软链安装时裸模块名才解析得到
+!packages/loom-dsh/node_modules/
+!packages/loom-dsh/node_modules/**
 *.db
 *.db-wal
 *.db-shm

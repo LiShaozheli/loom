@@ -29,6 +29,34 @@ const OUT = {
   render: (_args, value) => text(JSON.stringify(value, null, 2)),
 };
 
+
+// ---- 配置 schema（设置页据此渲染）----
+// schemastery 已 vendor 到本包 node_modules：软链安装时裸模块名解析不到 profile 的依赖。
+let Schema = null;
+try {
+  const mod = await import('@deepseek-ai/schemastery');
+  Schema = mod.default ?? mod;
+} catch {
+  Schema = null;
+}
+
+export const Config = Schema
+  ? Schema.object({
+      dbPath: Schema.string().description('库文件路径；留空用默认位置').default(''),
+      scope: Schema.union([Schema.const('global'), Schema.const('workspace')])
+        .description('global 跟着用户走；workspace 只属于当前工作区')
+        .default('global'),
+      budget: Schema.number().description('单次 memory_recall 的 token 预算').min(50).max(4000).default(300),
+      hot: Schema.boolean().description('每轮自动注入热记忆').default(true),
+      hotBytes: Schema.number().description('热记忆字节上限（进每一轮上下文，就是长期成本）').min(0).max(16384).default(2048),
+      protocol: Schema.boolean().description('是否注入「什么时候该写、该查」的使用协议').default(true),
+      epochDays: Schema.number().description('L0 时间片长度（天）；删除权的最小单位').min(1).max(365).default(7),
+      render: Schema.union([Schema.const('legend'), Schema.const('plain'), Schema.const('xml')])
+        .description('取回结果的渲染策略')
+        .default('legend'),
+    })
+  : undefined;
+
 export const inject = ['tools'];
 
 /** 热记忆默认字节上限：它进每一轮上下文，字节数就是长期成本 */
