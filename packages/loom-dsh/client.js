@@ -14,6 +14,26 @@ window.__ModuleLoader__.load({
     const React = require('react');
     const h = React.createElement;
 
+    // 探测包私有 RPC：文档说 Client 可以用 host.call，但宿主侧怎么注册没写。
+    // 这里只是"看得到什么"，不改变任何行为；结果直接显示在面板上。
+    const probe = (() => {
+      const out = { host: null, ctx: null, location: '', fetch: typeof fetch };
+      try { out.location = window.location.protocol + '//' + window.location.host; } catch {}
+      try {
+        const hostMod = require('host');
+        out.host = { ok: true, keys: Object.keys(hostMod || {}), call: typeof hostMod?.call };
+      } catch (e) {
+        out.host = { ok: false, err: String(e && e.message).slice(0, 120) };
+      }
+      try {
+        const ctxMod = require('ctx');
+        out.ctx = { ok: true, keys: Object.keys(ctxMod || {}) };
+      } catch (e) {
+        out.ctx = { ok: false, err: String(e && e.message).slice(0, 120) };
+      }
+      return out;
+    })();
+
     const C = {
       wrap: { padding: '16px', font: 'inherit', color: 'inherit', overflow: 'auto', height: '100%' },
       h1: { fontSize: 15, fontWeight: 600, margin: '0 0 4px' },
@@ -107,7 +127,8 @@ window.__ModuleLoader__.load({
           ? h(
               'div',
               { style: C.err },
-              '桌面模式没有 HTTP 服务，面板读不到实时数据（工具仍然可用：让助手调 memory_outline 或输入 /loom outline）。'
+              '桌面模式没有 HTTP 服务，面板读不到实时数据（工具仍然可用：让助手调 memory_outline 或输入 /loom outline）。',
+              h('div', { style: { ...C.meta, marginTop: 6 } }, '通道探测：' + JSON.stringify(probe))
             )
           : state.error
           ? h(
