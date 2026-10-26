@@ -21,10 +21,28 @@ LOOM 分成三层，各管一件事：
 
 **压缩只影响怎么读，不影响怎么存。**
 
+## 架构一图
+
+```mermaid
+flowchart TD
+    U["用户消息 / 模型回复 / 工具结果"] --> H["session/event 钩子"]
+    H --> L0["L0 编年层<br/>原文 · 哈希链 · 可销毁"]
+    H --> P["捕获判定"]
+    P --> G["闸门 四道校验"]
+    G --> L1["L1 视图<br/>claim · doc · edge"]
+    L1 --> OUT["热记忆注入 / 按需召回 / 面板"]
+    L0 -. 压缩失败也不影响 .- OUT
+```
+
+**L0 与 L1 并列**：闸门拒绝只会让它进不了 L1，原文照样在 L0。
+
+完整架构（写入/读取时序、模块地图、落盘布局、不变量）见
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
+
 ## 快速开始
 
 ```bash
-npm test            # 174 个测试
+npm test            # 181 个测试
 npm run verify      # 12 条门禁
 npm run demo        # 端到端：写入 → 检索 → 取回 → 冲突 → 删除
 ```
