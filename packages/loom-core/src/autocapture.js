@@ -30,6 +30,37 @@ const KIND_HINT = [
  * @param {string} text
  * @returns {{capture:boolean, kind:string, reason:string, text:string}}
  */
+
+/**
+ * 去掉宿主塞进来的运行时上下文。
+ *
+ * 真实会话里，user 消息常常是「用户原话 + 一大段注入内容」（时间戳、记忆快照、
+ * 子代理的 checkpoint）。不剥掉它们，判定就只会看到"一坨多行长文"，
+ * 于是全部判成 pasted-block / too-long——记忆一条都长不出来。
+ *
+ * 归档仍然存原文；这里只影响"要不要记"的判断。
+ */
+const RUNTIME_NOISE = [
+  /^\[dsh-mnemon:/m,
+  /^MNEMON RUNTIME MEMORY/m,
+  /^\s*Time sampled while preparing turn/m,
+  /^\s*Current runtime context\./m,
+  /^\s*Tokens prefixed by @/m,
+  /^\s*<runtime-memory-file/m,
+  /^\s*\[MNEMON\]/m,
+  /^\s*Current working directory:/m,
+];
+
+export function stripRuntimeNoise(text) {
+  const raw = String(text ?? '');
+  let cut = raw.length;
+  for (const re of RUNTIME_NOISE) {
+    const m = raw.match(re);
+    if (m && m.index !== undefined && m.index < cut) cut = m.index;
+  }
+  return raw.slice(0, cut).trim();
+}
+
 export function pickDurable(text, { level = 'normal' } = {}) {
   const raw = String(text ?? '').trim();
   if (!raw) return { capture: false, kind: 'fact', reason: 'empty', text: '' };

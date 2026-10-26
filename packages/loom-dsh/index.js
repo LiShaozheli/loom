@@ -19,7 +19,7 @@ import { sweep } from './vendor/decay.js';
 import { buildHotMemory } from './vendor/hot.js';
 import { resolveDbPath } from './vendor/paths.js';
 import { detectIntent, stripCue } from './vendor/capture.js';
-import { pickDurable } from './vendor/autocapture.js';
+import { pickDurable, stripRuntimeNoise } from './vendor/autocapture.js';
 import { archiveMessages, messageText, messageKey } from './vendor/archive.js';
 import { runLoomCommand } from './vendor/command.js';
 import { Chronicle } from './vendor/chronicle.js';
@@ -240,7 +240,9 @@ export function apply(ctx, config = {}) {
           // 而 session/event 是确定会来的（归档一直是好的）。
           if (role === 'user' && config.autoCapture !== false) {
             try {
-              const pick = pickDurable(text, { level: autoCaptureLevel });
+              // 先剥掉宿主塞进来的运行时上下文，否则只会看到"一坨多行长文"
+              const human = stripRuntimeNoise(text);
+              const pick = pickDurable(human, { level: autoCaptureLevel });
               if (pick.capture) {
                 const saved = saveCaptured(pick.text, pick.kind, session?.id);
                 if (saved) hookLog(null, `captured ${pick.kind} ${saved.claimId ?? saved.docId}`);

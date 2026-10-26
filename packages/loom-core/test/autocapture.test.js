@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { pickDurable } from '../src/autocapture.js';
+import { pickDurable, stripRuntimeNoise } from '../src/autocapture.js';
 
 test('强线索：明确说了要记', () => {
   assert.equal(pickDurable('记住：预发端口 8081').capture, true);
@@ -59,4 +59,20 @@ test('capture level：normal 连偏好陈述也记，strict 不记', () => {
   assert.equal(pickDurable('这个项目的文档都写中文', { level: 'strict' }).capture, false);
   // 问句仍然不记，任何级别
   assert.equal(pickDurable('我不喜欢注释太多，对吗？').capture, false);
+});
+
+test('运行时上下文不参与判定（真实会话里它占了大半）', () => {
+  const real = '这个项目用 pnpm\n\nCurrent runtime context. 快照……\nMNEMON RUNTIME MEMORY SNAPSHOT\n……';
+  const clean = stripRuntimeNoise(real);
+  assert.equal(clean, '这个项目用 pnpm');
+  assert.equal(pickDurable(clean).capture, true);
+
+  // 子代理的 checkpoint 整段剥掉
+  assert.equal(stripRuntimeNoise('[dsh-mnemon:delegated review]\n一堆 checkpoint'), '');
+  assert.equal(pickDurable('').capture, false);
+});
+
+test('没有标记时原样返回', () => {
+  assert.equal(stripRuntimeNoise('记住：端口 8081'), '记住：端口 8081');
+  assert.equal(stripRuntimeNoise(''), '');
 });
