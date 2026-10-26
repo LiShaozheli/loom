@@ -248,6 +248,13 @@ window.__ModuleLoader__.load({
             }),
             h('button', { type: 'button', style: C.btn, onClick: () => save(key, Number(draft[key] != null ? draft[key] : cfg[key])) }, '保存'))),
           saved ? h('div', { style: String(saved).startsWith('已保存') ? C.ok : C.err }, saved) : null,
+          h('div', { style: C.row },
+            h('span', { style: C.label }, '备份'),
+            h('button', {
+              type: 'button', style: C.btn,
+              onClick: () => { if (base) window.open(base + '/loom/export.zip', '_blank'); },
+            }, '下载记忆包 ZIP')),
+          h('div', { style: C.meta }, '包含记忆、文档、文档历史与关系边；不含密钥。'),
           h('div', { style: C.meta }, '改动会写进 profile 的 loom-memory 行；部分键需要重启生效。')
         );
       }

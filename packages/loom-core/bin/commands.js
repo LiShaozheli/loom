@@ -16,6 +16,7 @@ import { SqliteLedger } from '../src/sqlite-ledger.js';
 import { stripTail, parseTail } from '../src/aiw.js';
 import { chars4Counter } from '../src/contracts.js';
 import { exportToFile, importFromFile } from '../src/transfer.js';
+import { exportToZip, importFromZip } from '../src/bundle.js';
 import { sweep } from '../src/decay.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -282,4 +283,34 @@ export function shredCmd(epochId, reason = '用户要求') {
   chron.destroyEpoch(epochId, reason);
   const v = chron.verify(epochId);
   console.log(`已销毁 ${epochId}：内容不可读，墓碑已留，链仍可验（${v.ok ? '是' : '否'}）`);
+}
+
+/** 导出 ZIP 记忆包（含文档版本与关系边） */
+export function exportZipCmd(file) {
+  const db = new SqliteLedger(liveDbPath());
+  const manifest = exportToZip(db, file);
+  db.close();
+  console.log(`已打包 → ${file}`);
+  console.log(`  ${JSON.stringify(manifest.counts)}`);
+}
+
+/** 导入 ZIP 记忆包 */
+export function importZipCmd(file) {
+  const db = new SqliteLedger(liveDbPath());
+  const counts = importFromZip(db, file);
+  db.close();
+  console.log(`导入完成：${JSON.stringify(counts)}`);
+}
+
+/** 看某篇文档的历史版本 */
+export function docRevsCmd(keyword) {
+  const db = new SqliteLedger(liveDbPath());
+  const docs = db.docs().filter((d) => !keyword || d.title.includes(keyword));
+  for (const d of docs) {
+    const revs = db.docRevisions(d.id);
+    console.log(`${d.title}（${d.id}）· ${revs.length} 版`);
+    for (const r of revs) console.log(`  v${r.rev} ${new Date(r.at).toISOString().slice(0, 16)} ${r.body.slice(0, 40)}`);
+  }
+  if (!docs.length) console.log('没有匹配的文档');
+  db.close();
 }

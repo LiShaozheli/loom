@@ -16,6 +16,7 @@
 import {
   demo, verify, recallCmd, gateFile,
   exportCmd, importCmd, decayCmd, epochsCmd, shredCmd,
+  exportZipCmd, importZipCmd, docRevsCmd,
 } from './commands.js';
 
 const args = process.argv.slice(2);
@@ -55,6 +56,17 @@ switch (cmd) {
   case 'decay':
     decayCmd(args.includes('--apply'));
     break;
+  case 'export-zip':
+    if (!arg) { console.error('用法：loom export-zip <file.zip>'); process.exit(2); }
+    exportZipCmd(arg);
+    break;
+  case 'import-zip':
+    if (!arg) { console.error('用法：loom import-zip <file.zip>'); process.exit(2); }
+    importZipCmd(arg);
+    break;
+  case 'doc-revs':
+    docRevsCmd(arg);
+    break;
   case 'epochs':
     epochsCmd();
     break;
@@ -66,6 +78,6 @@ switch (cmd) {
     shredCmd(arg, args[2]);
     break;
   default:
-    console.log('用法：loom <demo|verify|recall|gate|export|import|decay|epochs|shred> [参数]');
+    console.log('用法：loom <demo|verify|recall|gate|export|import|export-zip|import-zip|doc-revs|decay|epochs|shred> [参数]');
     process.exit(cmd ? 2 : 0);
 }

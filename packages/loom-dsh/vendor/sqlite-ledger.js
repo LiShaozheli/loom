@@ -76,6 +76,15 @@ CREATE TABLE IF NOT EXISTS doc (
   cold INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_doc_time ON doc(updated_at);
+CREATE TABLE IF NOT EXISTS doc_rev (
+  doc_id TEXT NOT NULL,
+  rev INTEGER NOT NULL,
+  title TEXT NOT NULL,
+  body TEXT NOT NULL,
+  at INTEGER NOT NULL,
+  PRIMARY KEY (doc_id, rev)
+);
+
 CREATE VIRTUAL TABLE IF NOT EXISTS doc_fts USING fts5(
   bg, title, tokenize='unicode61'
 );
@@ -290,6 +299,15 @@ export class SqliteLedger {
     this.db.prepare('DELETE FROM doc_fts WHERE rowid = (SELECT rowid FROM doc WHERE id = ?)').run(docId);
     const row = this.db.prepare('SELECT rowid FROM doc WHERE id = ?').get(docId);
     this.db.prepare('INSERT INTO doc_fts (rowid, bg, title) VALUES (?,?,?)').run(row.rowid, bg, title);
+
+    // 版本化：正文变了才留一版，同内容重复写不堆版本
+    const last = this.db.prepare('SELECT rev, body FROM doc_rev WHERE doc_id = ? ORDER BY rev DESC LIMIT 1').get(docId);
+    if (!last || last.body !== body) {
+      this.db
+        .prepare('INSERT INTO doc_rev (doc_id, rev, title, body, at) VALUES (?,?,?,?,?)')
+        .run(docId, (last?.rev ?? 0) + 1, title, body, now);
+    }
+
     return this.getDoc(docId);
   }
 
@@ -324,6 +342,28 @@ export class SqliteLedger {
   setDocCold(id, cold = true) {
     this.db.prepare('UPDATE doc SET cold = ? WHERE id = ?').run(cold ? 1 : 0, id);
     return this.getDoc(id);
+  }
+
+  /** 一篇文档的历史版本（新的在前） */
+  docRevisions(id) {
+    return this.db
+      .prepare('SELECT doc_id, rev, title, body, at FROM doc_rev WHERE doc_id = ? ORDER BY rev DESC')
+      .all(id);
+  }
+
+  /** 全量 claim（含已失效），用于导出 */
+  allClaims() {
+    return this.db.prepare('SELECT * FROM claim ORDER BY valid_from').all().map((r) => this.#map(r));
+  }
+
+  /** 全量边，用于导出 */
+  allEdges() {
+    return this.db.prepare('SELECT * FROM edge').all().map((e) => ({ from: e.from_id, to: e.to_id, type: e.type, weight: e.weight, createdAt: e.created_at }));
+  }
+
+  /** 全量文档（含冷），用于导出 */
+  allDocs() {
+    return this.db.prepare('SELECT * FROM doc').all();
   }
 
   docs() {

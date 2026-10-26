@@ -23,6 +23,7 @@ import { pickDurable } from './vendor/autocapture.js';
 import { archiveMessages, messageText, messageKey } from './vendor/archive.js';
 import { runLoomCommand } from './vendor/command.js';
 import { Chronicle } from './vendor/chronicle.js';
+import { exportBundle, bundleToZip } from './vendor/bundle.js';
 import { SqliteLedger } from './vendor/sqlite-ledger.js';
 
 const text = (s) => [{ type: 'text', text: String(s) }];
@@ -511,6 +512,27 @@ export function apply(ctx, config = {}) {
           return reply(200, { ok: true, key, value, note: '已保存；部分设置需要重启或刷新页面生效' });
         } catch (e) {
           return reply(500, { ok: false, error: String(e?.message ?? e) });
+        }
+      },
+    });
+
+    // 打包下载：/loom/export.zip
+    web.register({
+      kind: 'exact',
+      path: '/loom/export.zip',
+      handler: async (req, res) => {
+        try {
+          const zip = bundleToZip(exportBundle(ledger));
+          res.writeHead(200, {
+            'content-type': 'application/zip',
+            'content-disposition': 'attachment; filename="loom-memory.zip"',
+            'access-control-allow-origin': '*',
+            'cache-control': 'no-store',
+          });
+          res.end(zip);
+        } catch (e) {
+          res.writeHead(500, { 'content-type': 'application/json', 'access-control-allow-origin': '*' });
+          res.end(JSON.stringify({ ok: false, error: String(e?.message ?? e) }));
         }
       },
     });
