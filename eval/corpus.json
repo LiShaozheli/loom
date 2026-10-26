@@ -1,0 +1,452 @@
+{
+  "meta": {
+    "name": "aiw-bench-v1",
+    "note": "30 条记忆：编码 12 + 安全/部署/版本/事故 4 + 运维/前端/计费/合规等 14。",
+    "bias_warning": "语料、fragment 与 must_keep 均为作者编写，存在作者偏差。请用自己的记忆替换本文件后再下结论。",
+    "tiers": {
+      "aiw4": "题 ~8 token/条 · 标题/指针",
+      "aiw3": "轻 ~19 token/条 · 分页首批/低预算",
+      "aiw": "全 ~32 token/条 · 证据包正文",
+      "aiw2": "混合编码（已否决：真值无收益）",
+      "fragment": "碎片（基线·已淘汰）",
+      "original": "原文（L0）"
+    }
+  },
+  "items": [
+    {
+      "id": "m01",
+      "kind": "decision",
+      "original": "用户说之前在登录接口改造时试过用 JWT 做鉴权，但因为 refresh token 轮换的问题导致登录失败，所以最后回滚到了原来的 session 方案，这个决定是 10 月 24 日做的。",
+      "fragment": "尝试 JWT 鉴权失败，已回滚 session 方案。",
+      "aiw": "改登录鉴权→JWT，refresh轮换→登录失败，故回滚session。@2026-10-24 #12 !",
+      "must_keep": [
+        "JWT",
+        "refresh",
+        "回滚",
+        "session"
+      ],
+      "aiw2": "改 auth→JWT，refresh 轮换→登录失败，故 rollback session。@2026-10-24 #12 !",
+      "aiw3": "JWT鉴权→refresh轮换→登录败→回滚session @10-24 #12",
+      "aiw4": "JWT败→refresh轮换 #12"
+    },
+    {
+      "id": "m02",
+      "kind": "preference",
+      "original": "用户希望所有代码注释用英文写，但面向用户的文档（README、发布说明）用中文写，因为团队里有非中文的贡献者看代码，而用户自己是中文读者。",
+      "fragment": "代码注释用英文，用户文档用中文。",
+      "aiw": "代码注英文；用户档中文（README/发版说明）；因贡献者非中文、用户中文。@2026-10-20 #31 ?",
+      "must_keep": [
+        "英文",
+        "中文",
+        "README",
+        "贡献者"
+      ],
+      "aiw2": "代码注英文；用户档中文（README/发版说明）；因贡献者非中文、用户中文。@2026-10-20 #31 ?",
+      "aiw3": "码注英；档中（README）；因贡献者非中 @10-20 #31",
+      "aiw4": "码注英、档中，因贡献者 #31"
+    },
+    {
+      "id": "m03",
+      "kind": "bug",
+      "original": "有个 bug 是 Windows 上路径拼接用了正斜杠，导致配置文件读不到，错误信息是 ENOENT，只在打包后出现，开发环境正常。修复方法是用 path.join。",
+      "fragment": "Windows 路径拼接导致配置读取失败，已修复。",
+      "aiw": "Win路径拼正斜杠→配置读败（ENOENT）；仅打包后现，dev正常；修=path.join。@2026-10-22 #44 !",
+      "must_keep": [
+        "ENOENT",
+        "path.join",
+        "打包"
+      ],
+      "aiw2": "Win路径拼正斜杠→配置读败（ENOENT）；仅打包后现，dev正常；修=path.join。@2026-10-22 #44 !",
+      "aiw3": "Win斜杠→ENOENT；修=path.join；仅打包现 @10-22 #44",
+      "aiw4": "斜杠→ENOENT，path.join #44"
+    },
+    {
+      "id": "m04",
+      "kind": "redline",
+      "original": "用户强调绝对不能在没有备份的情况下直接跑数据库迁移，上次因为这事丢过一次数据，所以任何 destructive 操作都要先备份再执行。",
+      "fragment": "数据库迁移前必须先备份。",
+      "aiw": "!禁无备份跑库迁移；destructive先备份后执行；因曾丢数。@2026-10-18 #7 !",
+      "must_keep": [
+        "备份",
+        "迁移",
+        "destructive"
+      ],
+      "aiw2": "!禁无 backup 跑库迁移；destructive 先 backup 后执行；因曾丢数。@2026-10-18 #7 !",
+      "aiw3": "!禁无备份迁移；destructive先备份 @10-18 #7",
+      "aiw4": "禁无备份迁移 #7"
+    },
+    {
+      "id": "m05",
+      "kind": "open",
+      "original": "缓存到底用 Redis 还是本地 LRU 还没定，用户倾向于本地 LRU 因为部署简单，但担心多实例下不一致，等下周压测结果出来再定。",
+      "fragment": "缓存方案（Redis 或本地 LRU）尚未确定。",
+      "aiw": "?缓存Redis vs 本地LRU未定；用户偏LRU（部署简），忧多实例不一；待下周压测。@2026-10-25 #58 ?",
+      "must_keep": [
+        "Redis",
+        "LRU",
+        "压测"
+      ],
+      "aiw2": "?缓存Redis vs 本地LRU未定；用户偏LRU（部署简），忧多实例不一；待下周压测。@2026-10-25 #58 ?",
+      "aiw3": "?Redis vs LRU未定；偏LRU；待压测 @10-25 #58",
+      "aiw4": "Redis vs LRU未定 #58"
+    },
+    {
+      "id": "m06",
+      "kind": "api",
+      "original": "内部订单服务的接口是 POST /api/v2/orders，必须带 X-Tenant-Id 头，缺了会返回 403，分页用 cursor 不是 offset。",
+      "fragment": "订单接口需要 X-Tenant-Id 头。",
+      "aiw": "订单API=POST /api/v2/orders；必带X-Tenant-Id，缺→403；分页用cursor非offset。@2026-10-19 #21 !",
+      "must_keep": [
+        "X-Tenant-Id",
+        "403",
+        "cursor",
+        "orders"
+      ],
+      "aiw2": "订单API=POST /api/v2/orders；必带X-Tenant-Id，缺→403；分页用cursor非offset。@2026-10-19 #21 !",
+      "aiw3": "订单=POST /api/v2/orders；缺X-Tenant-Id→403；cursor分页 @10-19 #21",
+      "aiw4": "缺X-Tenant-Id→403 #21"
+    },
+    {
+      "id": "m07",
+      "kind": "style",
+      "original": "用户喜欢函数尽量不超过 40 行，超过就拆，而且不喜欢三层以上的嵌套，倾向先做参数校验。",
+      "fragment": "函数保持简短，先做参数校验。",
+      "aiw": "函数≤40行，超则拆；嵌套>3层禁；先校验入参。@2026-10-15 #16 ~",
+      "must_keep": [
+        "40",
+        "嵌套",
+        "校验"
+      ],
+      "aiw2": "函数≤40行，超则拆；nest>3层禁；先 validate 入参。@2026-10-15 #16 ~",
+      "aiw3": "函数≤40行；嵌套>3禁；先校验入参 @10-15 #16",
+      "aiw4": "函数≤40行 #16"
+    },
+    {
+      "id": "m08",
+      "kind": "rejected",
+      "original": "试过用正则解析 HTML 提取表格，但嵌套表格全乱，放弃了，改用 cheerio，速度慢一点但结果正确。",
+      "fragment": "正则解析 HTML 不可行，改用 cheerio。",
+      "aiw": "正则解HTML表→嵌套乱，弃；改cheerio（慢但正确）。@2026-10-21 #37 ~",
+      "must_keep": [
+        "正则",
+        "cheerio",
+        "嵌套"
+      ],
+      "aiw2": "正则解 HTML 表→nest 乱，弃；改 cheerio（慢但正确）。@2026-10-21 #37 ~",
+      "aiw3": "正则解HTML→嵌套乱，弃；改cheerio @10-21 #37",
+      "aiw4": "正则→嵌套乱，改cheerio #37"
+    },
+    {
+      "id": "m09",
+      "kind": "people",
+      "original": "这个项目的后端是老王负责，前端是小李，接口变更要先跟老王确认，他周三不在。",
+      "fragment": "后端负责人是老王，前端是小李。",
+      "aiw": "后端=老王，前端=小李；接口变更先问老王（周三不在）。@2026-10-23 #49 ?",
+      "must_keep": [
+        "老王",
+        "接口变更",
+        "周三"
+      ],
+      "aiw2": "后端=老王，前端=小李；接口变更先问老王（周三不在）。@2026-10-23 #49 ?",
+      "aiw3": "后端=老王；前端=小李；变更问老王，周三不在 @10-23 #49",
+      "aiw4": "老王，周三不在 #49"
+    },
+    {
+      "id": "m10",
+      "kind": "env",
+      "original": "这台机器上 Python 是 3.11，装包必须用 uv，用 pip 装会因为权限问题失败；Node 是 22.19，pnpm 走 corepack。",
+      "fragment": "Python 包用 uv 安装。",
+      "aiw": "Py=3.11，装包用uv（pip→权限败）；Node=22.19，pnpm用corepack。@2026-10-17 #28 !",
+      "must_keep": [
+        "uv",
+        "3.11",
+        "corepack"
+      ],
+      "aiw2": "Py=3.11，装包用uv（pip→权限败）；Node=22.19，pnpm用corepack。@2026-10-17 #28 !",
+      "aiw3": "Py=3.11用uv；Node=22.19用corepack @10-17 #28",
+      "aiw4": "Py=3.11用uv #28"
+    },
+    {
+      "id": "m11",
+      "kind": "deadline",
+      "original": "第一版演示在 11 月 5 日，之前必须把登录和支付两条链路跑通，其他功能可以砍。",
+      "fragment": "11 月 5 日演示。",
+      "aiw": "演示@11-05；此前必通登录+支付，余可砍。@2026-10-24 #63 !",
+      "must_keep": [
+        "登录",
+        "支付",
+        "演示"
+      ],
+      "aiw2": "演示@11-05；此前必通登录+支付，余可砍。@2026-10-24 #63 !",
+      "aiw3": "演示@11-05；必通登录+支付 @10-24 #63",
+      "aiw4": "演示@11-05，必通登录+支付 #63"
+    },
+    {
+      "id": "m12",
+      "kind": "profile",
+      "original": "用户是做后端出身的产品经理，看代码比看文档快，不喜欢被解释基础概念，喜欢直接给结论再给理由。",
+      "fragment": "用户偏好直接给结论。",
+      "aiw": "用户=后端出身产品；读码>读档；厌基础解释；先结论后理由。@2026-10-10 #3 ~",
+      "must_keep": [
+        "后端",
+        "产品",
+        "结论"
+      ],
+      "aiw2": "用户=后端出身产品；读码>读档；厌基础解释；先结论后理由。@2026-10-10 #3 ~",
+      "aiw3": "用户=后端出身产品；先结论后理由 @10-10 #3",
+      "aiw4": "后端产品，先结论 #3"
+    },
+    {
+      "id": "m13",
+      "kind": "redline",
+      "original": "生产环境的数据库密码放在 1Password 的 Infra 库里，本地开发用 .env.local，绝对不能提交到 git，上次有同事不小心 push 过，改了历史才清掉。",
+      "fragment": "数据库密码不能提交到 git。",
+      "aiw": "!生产DB密码在1Password Infra；本地=.env.local；!禁入git（曾误push，改史清除）。@2026-10-12 #71 !",
+      "aiw3": "!生产密码=1Password Infra；本地.env.local；禁入git #71",
+      "aiw4": "!密码:1Password，禁入git #71",
+      "must_keep": [
+        "1Password",
+        ".env.local",
+        "git"
+      ]
+    },
+    {
+      "id": "m14",
+      "kind": "env",
+      "original": "预发环境用 docker compose 起，端口 8081，日志在 /var/log/app/；上线前必须先跑 smoke 脚本，脚本在 scripts/smoke.sh。",
+      "fragment": "预发环境用 docker compose。",
+      "aiw": "预发=docker compose，:8081；日志/var/log/app；上线前必跑scripts/smoke.sh。@2026-10-14 #83 !",
+      "aiw3": "预发:compose:8081；日志/var/log/app；上线跑smoke.sh #83",
+      "aiw4": "预发:8081；上线跑smoke #83",
+      "must_keep": [
+        "8081",
+        "smoke",
+        "/var/log/app"
+      ]
+    },
+    {
+      "id": "m16",
+      "kind": "api",
+      "original": "所有服务必须锁 Postgres 16.2，因为 16.3 有个 vacuum 的回归 bug；驱动用 pgx v5.4，别再升级。",
+      "fragment": "Postgres 版本要锁死。",
+      "aiw": "!锁Postgres 16.2（16.3 vacuum回归）；驱动pgx v5.4，勿升。@2026-10-16 #102 !",
+      "aiw3": "!PG锁16.2(vacuum回归)；pgx v5.4勿升 #102",
+      "aiw4": "!PG 16.2，pgx v5.4 #102",
+      "must_keep": [
+        "16.2",
+        "vacuum",
+        "pgx v5.4"
+      ]
+    },
+    {
+      "id": "m17",
+      "kind": "bug",
+      "original": "上周的故障是缓存雪崩：key 同时过期，请求全打到 DB，DB 连接池被打满。修复是给 TTL 加随机抖动，并把连接池从 20 提到 50。",
+      "fragment": "上周故障是缓存雪崩，已修复。",
+      "aiw": "故障=缓存雪崩：key同过期→打DB→连接池满；修=TTL随机抖动+池20→50。@2026-10-11 #110 !",
+      "aiw3": "雪崩:key同过期→DB满；修=TTL抖动+池50 #110",
+      "aiw4": "雪崩→TTL抖动，池50 #110",
+      "must_keep": [
+        "雪崩",
+        "抖动",
+        "50"
+      ]
+    },
+    {
+      "id": "m19",
+      "kind": "ops",
+      "original": "告警走 Prometheus + Alertmanager，值班群是 #oncall，P1 必须 5 分钟内响应，P2 是 30 分钟。",
+      "fragment": "告警走 Prometheus。",
+      "aiw": "告警=Prometheus+Alertmanager；群#oncall；P1 5min响应，P2 30min。@2026-09-28 #131 !",
+      "aiw3": "告警:Prometheus+Alertmanager；#oncall；P1 5min/P2 30min #131",
+      "aiw4": "P1 5min，P2 30min #131",
+      "must_keep": [
+        "Alertmanager",
+        "oncall",
+        "5min"
+      ]
+    },
+    {
+      "id": "m20",
+      "kind": "ci",
+      "original": "CI 用 GitHub Actions，缓存 pnpm store，单次构建要压在 6 分钟内，超时就失败。",
+      "fragment": "CI 用 GitHub Actions。",
+      "aiw": "CI=GitHub Actions，缓存pnpm store；构建<6min，超时即败。@2026-09-30 #137 !",
+      "aiw3": "CI:GHA，缓存pnpm；<6min否则败 #137",
+      "aiw4": "CI<6min #137",
+      "must_keep": [
+        "pnpm store",
+        "6min",
+        "Actions"
+      ]
+    },
+    {
+      "id": "m21",
+      "kind": "frontend",
+      "original": "前端用 Vue 3 + Vite，状态用 Pinia，不要引入 Vuex，组件库统一 Element Plus。",
+      "fragment": "前端用 Vue 3。",
+      "aiw": "前端=Vue3+Vite；状态Pinia，禁Vuex；组件库Element Plus。@2026-10-01 #142 ~",
+      "aiw3": "Vue3+Vite；Pinia禁Vuex；Element Plus #142",
+      "aiw4": "Pinia，禁Vuex #142",
+      "must_keep": [
+        "Pinia",
+        "Vuex",
+        "Element Plus"
+      ]
+    },
+    {
+      "id": "m22",
+      "kind": "i18n",
+      "original": "多语言用 i18next，默认语言 zh-CN，回退 en；翻译文件必须带 key 前缀，不能硬编码中文。",
+      "fragment": "多语言用 i18next。",
+      "aiw": "i18n=i18next；默认zh-CN，回退en；翻译必带key前缀，禁硬编码中文。@2026-10-02 #149 ~",
+      "aiw3": "i18next；zh-CN→en；禁硬编码中文 #149",
+      "aiw4": "zh-CN回退en #149",
+      "must_keep": [
+        "zh-CN",
+        "en",
+        "硬编码"
+      ]
+    },
+    {
+      "id": "m23",
+      "kind": "billing",
+      "original": "计费按 token 阶梯价，超过 100 万 token 打 8 折，账单每月 1 号出，延迟 3 天可申诉。",
+      "fragment": "计费按 token 阶梯价。",
+      "aiw": "计费=token阶梯；>100万打8折；账单每月1号出，3天内可申诉。@2026-10-03 #155 !",
+      "aiw3": "计费:>100万8折；1号出账；3天申诉 #155",
+      "aiw4": "100万8折，3天申诉 #155",
+      "must_keep": [
+        "100 万",
+        "8 折",
+        "3 天"
+      ]
+    },
+    {
+      "id": "m24",
+      "kind": "compliance",
+      "original": "用户数据只能存境内，日志保留 180 天，导出必须脱敏，手机号只留后四位。",
+      "fragment": "用户数据只能存境内。",
+      "aiw": "!数据仅境内；日志留180天；导出必脱敏；手机号留后4位。@2026-10-04 #161 !",
+      "aiw3": "!境内存储；日志180天；导出脱敏；后4位 #161",
+      "aiw4": "日志180天，手机后4位 #161",
+      "must_keep": [
+        "180 天",
+        "脱敏",
+        "后四位"
+      ]
+    },
+    {
+      "id": "m25",
+      "kind": "backup",
+      "original": "数据库每天凌晨 2 点全备，保留 7 天；每周日做一次冷备到对象存储，保留 4 周。",
+      "fragment": "数据库每天全备。",
+      "aiw": "DB每日2点全备，留7天；周日冷备→对象存储，留4周。@2026-10-05 #168 !",
+      "aiw3": "DB 2点全备/7天；周日冷备/4周 #168",
+      "aiw4": "2点全备7天，冷备4周 #168",
+      "must_keep": [
+        "2 点",
+        "7 天",
+        "4 周"
+      ]
+    },
+    {
+      "id": "m26",
+      "kind": "mq",
+      "original": "异步任务走 RabbitMQ，交换机用 topic，死信队列保留 3 天，消费失败重试 3 次后进死信。",
+      "fragment": "异步任务走 RabbitMQ。",
+      "aiw": "异步=RabbitMQ，topic交换机；死信留3天；重试3次→死信。@2026-10-06 #174 ~",
+      "aiw3": "RabbitMQ topic；死信3天；重试3次 #174",
+      "aiw4": "重试3次进死信 #174",
+      "must_keep": [
+        "topic",
+        "死信",
+        "3 次"
+      ]
+    },
+    {
+      "id": "m27",
+      "kind": "search",
+      "original": "站内搜索用 Meilisearch，索引每小时重建一次，中文分词用 jieba，搜索延迟要低于 100ms。",
+      "fragment": "站内搜索用 Meilisearch。",
+      "aiw": "搜索=Meilisearch；索引每小时重建；中文jieba；延迟<100ms。@2026-10-07 #180 ~",
+      "aiw3": "Meilisearch；小时重建；jieba；<100ms #180",
+      "aiw4": "jieba，<100ms #180",
+      "must_keep": [
+        "jieba",
+        "100ms",
+        "每小时"
+      ]
+    },
+    {
+      "id": "m28",
+      "kind": "authz",
+      "original": "权限模型是 RBAC，角色分 admin、editor、viewer 三级，viewer 不能导出，admin 才能改成员。",
+      "fragment": "权限模型是 RBAC。",
+      "aiw": "权限=RBAC；admin/editor/viewer三级；viewer禁导出；仅admin改成员。@2026-10-08 #186 !",
+      "aiw3": "RBAC三级；viewer禁导出；admin改成员 #186",
+      "aiw4": "viewer禁导出 #186",
+      "must_keep": [
+        "viewer",
+        "导出",
+        "admin"
+      ]
+    },
+    {
+      "id": "m29",
+      "kind": "docs",
+      "original": "文档站用 Docusaurus，部署在 Vercel，主分支合并即自动发布，预览环境带 PR 号。",
+      "fragment": "文档站用 Docusaurus。",
+      "aiw": "文档=Docusaurus@Vercel；main合并即发；预览带PR号。@2026-10-09 #192 ~",
+      "aiw3": "Docusaurus@Vercel；main即发；预览带PR号 #192",
+      "aiw4": "Vercel自动发布 #192",
+      "must_keep": [
+        "Vercel",
+        "PR 号",
+        "main"
+      ]
+    },
+    {
+      "id": "m30",
+      "kind": "logging",
+      "original": "日志必须是 JSON 一行一条，字段固定 trace_id、level、msg，禁止打印手机号和密码。",
+      "fragment": "日志必须是 JSON 格式。",
+      "aiw": "!日志=JSON单行；字段trace_id/level/msg；禁打手机号与密码。@2026-10-10 #198 !",
+      "aiw3": "!JSON单行；trace_id/level/msg；禁手机号密码 #198",
+      "aiw4": "JSON单行，禁密码 #198",
+      "must_keep": [
+        "trace_id",
+        "手机号",
+        "密码"
+      ]
+    },
+    {
+      "id": "m31",
+      "kind": "release",
+      "original": "发布走蓝绿，先切 10% 流量观察 30 分钟，无错误再全量；回滚按钮在发布面板右上角。",
+      "fragment": "发布走蓝绿。",
+      "aiw": "发布=蓝绿；先10%观察30min，无错再全量；回滚在面板右上。@2026-10-11 #204 !",
+      "aiw3": "蓝绿；10%观察30min；回滚面板右上 #204",
+      "aiw4": "10%观察30min #204",
+      "must_keep": [
+        "10%",
+        "30 分钟",
+        "回滚"
+      ]
+    },
+    {
+      "id": "m32",
+      "kind": "test",
+      "original": "单元测试覆盖率门槛 70%，低于门槛 CI 直接失败；e2e 只在 nightly 跑，用 Playwright。",
+      "fragment": "单元测试覆盖率有门槛。",
+      "aiw": "覆盖率≥70%，低于则CI败；e2e仅nightly，用Playwright。@2026-10-12 #210 !",
+      "aiw3": "覆盖≥70%否则CI败；e2e nightly Playwright #210",
+      "aiw4": "70%门槛 #210",
+      "must_keep": [
+        "70%",
+        "nightly",
+        "Playwright"
+      ]
+    }
+  ]
+}

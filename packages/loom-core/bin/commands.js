@@ -1,4 +1,4 @@
-﻿/**
+/**
  * CLI 命令实现。全部是纯函数 + console 输出，方便单独测试。
  */
 
@@ -18,13 +18,10 @@ import { chars4Counter } from '../src/contracts.js';
 import { exportToFile, importFromFile } from '../src/transfer.js';
 import { exportToZip, importFromZip } from '../src/bundle.js';
 import { sweep } from '../src/decay.js';
+import { corpusPath, loadCorpus } from '../src/eval-data.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const repo = path.resolve(here, '../../../..');
-
-export const corpusPath = path.join(repo, 'aiw', 'corpus.json');
-
-const loadCorpus = () => JSON.parse(fs.readFileSync(corpusPath, 'utf8'));
+export { corpusPath, loadCorpus };
 
 /** 与插件一致的默认库路径 */
 export const liveDbPath = () =>

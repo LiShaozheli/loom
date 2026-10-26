@@ -19,8 +19,9 @@ import { stripTail } from '../packages/loom-core/src/aiw.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, '../..');
-const corpus = JSON.parse(fs.readFileSync(path.join(repo, 'aiw', 'corpus.json'), 'utf8'));
-const qa = JSON.parse(fs.readFileSync(path.join(repo, 'aiw', 'qa.json'), 'utf8')).qa;
+const { loadCorpus, loadQa } = await import('../packages/loom-core/src/eval-data.js');
+const corpus = loadCorpus();
+const qa = loadQa();
 
 const argv = process.argv.slice(2);
 const arg = (k, d) => {

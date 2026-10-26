@@ -16,7 +16,8 @@ import { shouldRecall } from '../packages/loom-core/src/admission.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, '../..');
-const qa = JSON.parse(fs.readFileSync(path.join(repo, 'aiw', 'qa.json'), 'utf8')).qa;
+const { loadQa } = await import('../packages/loom-core/src/eval-data.js');
+const qa = loadQa();
 
 const ACKS = [
   '好的', '继续', '谢谢', '嗯', '收到', 'ok', '下一步', '没问题', '行', '可以',

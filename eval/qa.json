@@ -1,0 +1,1412 @@
+{
+ "meta": {
+  "note": "200 题：disc 查保真差距、base 查回归、abstain 查该不该答。qa.mjs 会先校验前两类。",
+  "count": 200
+ },
+ "qa": [
+  {
+   "id": "m01",
+   "type": "d",
+   "question": "登录鉴权为什么放弃了 JWT？",
+   "targets": [
+    "refresh"
+   ]
+  },
+  {
+   "id": "m01",
+   "type": "d",
+   "question": "JWT 是在哪个环节出的问题？",
+   "targets": [
+    "refresh"
+   ]
+  },
+  {
+   "id": "m01",
+   "type": "d",
+   "question": "这次改造换过什么方案、为什么退回去？",
+   "targets": [
+    "refresh"
+   ]
+  },
+  {
+   "id": "m01",
+   "type": "b",
+   "question": "最后回滚到了什么方案？",
+   "targets": [
+    "session"
+   ]
+  },
+  {
+   "id": "m02",
+   "type": "d",
+   "question": "为什么用户文档要用中文写？",
+   "targets": [
+    "贡献者"
+   ]
+  },
+  {
+   "id": "m02",
+   "type": "d",
+   "question": "哪些文档要用中文？",
+   "targets": [
+    "README"
+   ]
+  },
+  {
+   "id": "m02",
+   "type": "d",
+   "question": "文档语言是怎么定的？",
+   "targets": [
+    "贡献者",
+    "README"
+   ]
+  },
+  {
+   "id": "m02",
+   "type": "b",
+   "question": "代码注释用什么语言？",
+   "targets": [
+    "英文"
+   ]
+  },
+  {
+   "id": "m03",
+   "type": "d",
+   "question": "报的是什么错？",
+   "targets": [
+    "ENOENT"
+   ]
+  },
+  {
+   "id": "m03",
+   "type": "d",
+   "question": "这个 bug 最后用什么修好的？",
+   "targets": [
+    "path.join"
+   ]
+  },
+  {
+   "id": "m03",
+   "type": "d",
+   "question": "为什么开发环境没有暴露这个问题？",
+   "targets": [
+    "打包"
+   ]
+  },
+  {
+   "id": "m03",
+   "type": "d",
+   "question": "错误码和修复方式分别是什么？",
+   "targets": [
+    "ENOENT",
+    "path.join"
+   ]
+  },
+  {
+   "id": "m04",
+   "type": "d",
+   "question": "这条红线除了数据库迁移，还管哪些操作？",
+   "targets": [
+    "destructive"
+   ]
+  },
+  {
+   "id": "m04",
+   "type": "d",
+   "question": "这条要求的适用范围有多大？",
+   "targets": [
+    "destructive"
+   ]
+  },
+  {
+   "id": "m04",
+   "type": "d",
+   "question": "为什么要求这么硬？",
+   "targets": [
+    "destructive"
+   ]
+  },
+  {
+   "id": "m04",
+   "type": "b",
+   "question": "迁移之前必须做什么？",
+   "targets": [
+    "备份"
+   ]
+  },
+  {
+   "id": "m05",
+   "type": "d",
+   "question": "缓存方案什么时候能定下来？",
+   "targets": [
+    "压测"
+   ]
+  },
+  {
+   "id": "m05",
+   "type": "d",
+   "question": "还缺什么信息才能拍板？",
+   "targets": [
+    "压测"
+   ]
+  },
+  {
+   "id": "m05",
+   "type": "d",
+   "question": "现在卡在什么上？",
+   "targets": [
+    "压测"
+   ]
+  },
+  {
+   "id": "m05",
+   "type": "b",
+   "question": "两个候选方案是什么？",
+   "targets": [
+    "Redis",
+    "LRU"
+   ]
+  },
+  {
+   "id": "m06",
+   "type": "d",
+   "question": "少了 X-Tenant-Id 会返回什么状态码？",
+   "targets": [
+    "403"
+   ]
+  },
+  {
+   "id": "m06",
+   "type": "d",
+   "question": "分页用什么方式？",
+   "targets": [
+    "cursor"
+   ]
+  },
+  {
+   "id": "m06",
+   "type": "d",
+   "question": "接口的完整路径是什么？",
+   "targets": [
+    "orders"
+   ]
+  },
+  {
+   "id": "m06",
+   "type": "d",
+   "question": "三个硬约束是什么？",
+   "targets": [
+    "403",
+    "cursor",
+    "orders"
+   ]
+  },
+  {
+   "id": "m07",
+   "type": "d",
+   "question": "函数行数的上限是多少？",
+   "targets": [
+    "40"
+   ]
+  },
+  {
+   "id": "m07",
+   "type": "d",
+   "question": "多层结构有什么限制？",
+   "targets": [
+    "嵌套"
+   ]
+  },
+  {
+   "id": "m07",
+   "type": "d",
+   "question": "代码风格上的两条硬指标是什么？",
+   "targets": [
+    "40",
+    "嵌套"
+   ]
+  },
+  {
+   "id": "m07",
+   "type": "b",
+   "question": "写代码前先做什么？",
+   "targets": [
+    "校验"
+   ]
+  },
+  {
+   "id": "m08",
+   "type": "d",
+   "question": "为什么放弃用正则解析 HTML？",
+   "targets": [
+    "嵌套"
+   ]
+  },
+  {
+   "id": "m08",
+   "type": "d",
+   "question": "表格解析失败的具体表现？",
+   "targets": [
+    "嵌套"
+   ]
+  },
+  {
+   "id": "m08",
+   "type": "b",
+   "question": "最终方案在这个场景下有什么代价？",
+   "targets": [
+    "cheerio"
+   ]
+  },
+  {
+   "id": "m09",
+   "type": "d",
+   "question": "老王哪一天不在？",
+   "targets": [
+    "周三"
+   ]
+  },
+  {
+   "id": "m09",
+   "type": "d",
+   "question": "找人确认的最佳时间要避开哪天？",
+   "targets": [
+    "周三"
+   ]
+  },
+  {
+   "id": "m09",
+   "type": "b",
+   "question": "后端负责人是谁？",
+   "targets": [
+    "老王"
+   ]
+  },
+  {
+   "id": "m10",
+   "type": "d",
+   "question": "Node 是什么版本？",
+   "targets": [
+    "22.19"
+   ]
+  },
+  {
+   "id": "m10",
+   "type": "d",
+   "question": "Python 是什么版本？",
+   "targets": [
+    "3.11"
+   ]
+  },
+  {
+   "id": "m10",
+   "type": "d",
+   "question": "pnpm 是怎么装出来的？",
+   "targets": [
+    "corepack"
+   ]
+  },
+  {
+   "id": "m10",
+   "type": "d",
+   "question": "环境上有哪些版本约束？",
+   "targets": [
+    "3.11",
+    "22.19",
+    "corepack"
+   ]
+  },
+  {
+   "id": "m11",
+   "type": "d",
+   "question": "演示之前必须跑通哪两条链路？",
+   "targets": [
+    "登录",
+    "支付"
+   ]
+  },
+  {
+   "id": "m11",
+   "type": "d",
+   "question": "时间不够可以砍什么？",
+   "targets": [
+    "支付"
+   ]
+  },
+  {
+   "id": "m11",
+   "type": "b",
+   "question": "这件事定在哪天？",
+   "targets": [
+    "演示"
+   ]
+  },
+  {
+   "id": "m12",
+   "type": "d",
+   "question": "这位用户是什么职业背景？",
+   "targets": [
+    "后端",
+    "产品"
+   ]
+  },
+  {
+   "id": "m12",
+   "type": "b",
+   "question": "该怎么给他做汇报？",
+   "targets": [
+    "结论"
+   ]
+  },
+  {
+   "id": "m12",
+   "type": "d",
+   "question": "他的阅读习惯是什么？",
+   "targets": [
+    "后端"
+   ]
+  },
+  {
+   "id": "m13",
+   "type": "d",
+   "question": "生产环境的数据库密码存在哪里？",
+   "targets": [
+    "1Password"
+   ]
+  },
+  {
+   "id": "m13",
+   "type": "d",
+   "question": "本地开发用的密码放在哪个文件？",
+   "targets": [
+    ".env.local"
+   ]
+  },
+  {
+   "id": "m13",
+   "type": "d",
+   "question": "凭据管理的两条规则是什么？",
+   "targets": [
+    "1Password",
+    ".env.local"
+   ]
+  },
+  {
+   "id": "m13",
+   "type": "b",
+   "question": "密码能不能进版本库？",
+   "targets": [
+    "git"
+   ]
+  },
+  {
+   "id": "m14",
+   "type": "d",
+   "question": "预发环境跑在哪个端口？",
+   "targets": [
+    "8081"
+   ]
+  },
+  {
+   "id": "m14",
+   "type": "d",
+   "question": "上线前必须先跑什么？",
+   "targets": [
+    "smoke"
+   ]
+  },
+  {
+   "id": "m14",
+   "type": "d",
+   "question": "预发的日志在哪？",
+   "targets": [
+    "/var/log/app"
+   ]
+  },
+  {
+   "id": "m14",
+   "type": "d",
+   "question": "预发环境的地址与检查步骤？",
+   "targets": [
+    "8081",
+    "smoke"
+   ]
+  },
+  {
+   "id": "m16",
+   "type": "d",
+   "question": "Postgres 应该锁在哪个版本？",
+   "targets": [
+    "16.2"
+   ]
+  },
+  {
+   "id": "m16",
+   "type": "d",
+   "question": "为什么要锁这个版本？",
+   "targets": [
+    "vacuum"
+   ]
+  },
+  {
+   "id": "m16",
+   "type": "d",
+   "question": "数据库驱动用哪个版本？",
+   "targets": [
+    "pgx v5.4"
+   ]
+  },
+  {
+   "id": "m16",
+   "type": "d",
+   "question": "版本锁定涉及哪两个组件？",
+   "targets": [
+    "16.2",
+    "pgx v5.4"
+   ]
+  },
+  {
+   "id": "m17",
+   "type": "d",
+   "question": "上次故障后来是怎么修的？",
+   "targets": [
+    "抖动"
+   ]
+  },
+  {
+   "id": "m17",
+   "type": "d",
+   "question": "连接池最后调到多少？",
+   "targets": [
+    "50"
+   ]
+  },
+  {
+   "id": "m17",
+   "type": "b",
+   "question": "故障的触发链条是什么？",
+   "targets": [
+    "雪崩"
+   ]
+  },
+  {
+   "id": "m17",
+   "type": "d",
+   "question": "修复的两个动作分别是什么？",
+   "targets": [
+    "抖动",
+    "50"
+   ]
+  },
+  {
+   "id": "m19",
+   "type": "d",
+   "question": "告警用哪两个组件？",
+   "targets": [
+    "Alertmanager"
+   ]
+  },
+  {
+   "id": "m19",
+   "type": "d",
+   "question": "值班群叫什么？",
+   "targets": [
+    "oncall"
+   ]
+  },
+  {
+   "id": "m19",
+   "type": "d",
+   "question": "P1 的响应时限是多少？",
+   "targets": [
+    "5min"
+   ]
+  },
+  {
+   "id": "m19",
+   "type": "d",
+   "question": "告警链路的组件与响应要求？",
+   "targets": [
+    "Alertmanager",
+    "5min"
+   ]
+  },
+  {
+   "id": "m20",
+   "type": "b",
+   "question": "CI 跑在哪个平台？",
+   "targets": [
+    "Actions"
+   ]
+  },
+  {
+   "id": "m20",
+   "type": "d",
+   "question": "缓存的是什么？",
+   "targets": [
+    "pnpm store"
+   ]
+  },
+  {
+   "id": "m20",
+   "type": "d",
+   "question": "构建超时线是多少？",
+   "targets": [
+    "6min"
+   ]
+  },
+  {
+   "id": "m21",
+   "type": "d",
+   "question": "状态管理用什么？",
+   "targets": [
+    "Pinia"
+   ]
+  },
+  {
+   "id": "m21",
+   "type": "d",
+   "question": "哪个状态库被明确禁止？",
+   "targets": [
+    "Vuex"
+   ]
+  },
+  {
+   "id": "m21",
+   "type": "d",
+   "question": "组件库统一用哪个？",
+   "targets": [
+    "Element Plus"
+   ]
+  },
+  {
+   "id": "m21",
+   "type": "d",
+   "question": "状态与组件库的选型是什么？",
+   "targets": [
+    "Pinia",
+    "Element Plus"
+   ]
+  },
+  {
+   "id": "m22",
+   "type": "d",
+   "question": "默认语言是什么？",
+   "targets": [
+    "zh-CN"
+   ]
+  },
+  {
+   "id": "m22",
+   "type": "d",
+   "question": "回退语言是什么？",
+   "targets": [
+    "en"
+   ]
+  },
+  {
+   "id": "m22",
+   "type": "d",
+   "question": "翻译文件的硬性要求是什么？",
+   "targets": [
+    "硬编码"
+   ]
+  },
+  {
+   "id": "m22",
+   "type": "d",
+   "question": "语言配置的两个默认值？",
+   "targets": [
+    "zh-CN",
+    "en"
+   ]
+  },
+  {
+   "id": "m23",
+   "type": "d",
+   "question": "超过多少 token 打折？",
+   "targets": [
+    "100 万"
+   ]
+  },
+  {
+   "id": "m23",
+   "type": "d",
+   "question": "折扣是多少？",
+   "targets": [
+    "8 折"
+   ]
+  },
+  {
+   "id": "m23",
+   "type": "d",
+   "question": "账单争议的申诉窗口多久？",
+   "targets": [
+    "3 天"
+   ]
+  },
+  {
+   "id": "m23",
+   "type": "d",
+   "question": "计费的阶梯与申诉期？",
+   "targets": [
+    "8 折",
+    "3 天"
+   ]
+  },
+  {
+   "id": "m24",
+   "type": "d",
+   "question": "日志保留多少天？",
+   "targets": [
+    "180 天"
+   ]
+  },
+  {
+   "id": "m24",
+   "type": "d",
+   "question": "数据导出要做什么处理？",
+   "targets": [
+    "脱敏"
+   ]
+  },
+  {
+   "id": "m24",
+   "type": "d",
+   "question": "手机号怎么存？",
+   "targets": [
+    "后4位"
+   ]
+  },
+  {
+   "id": "m24",
+   "type": "d",
+   "question": "合规上的三条硬要求？",
+   "targets": [
+    "180 天",
+    "脱敏",
+    "后4位"
+   ]
+  },
+  {
+   "id": "m25",
+   "type": "d",
+   "question": "全备是几点？",
+   "targets": [
+    "2 点"
+   ]
+  },
+  {
+   "id": "m25",
+   "type": "d",
+   "question": "全备保留几天？",
+   "targets": [
+    "7 天"
+   ]
+  },
+  {
+   "id": "m25",
+   "type": "d",
+   "question": "冷备保留几周？",
+   "targets": [
+    "4 周"
+   ]
+  },
+  {
+   "id": "m25",
+   "type": "d",
+   "question": "备份的时间与两档保留期？",
+   "targets": [
+    "2 点",
+    "7 天",
+    "4 周"
+   ]
+  },
+  {
+   "id": "m26",
+   "type": "d",
+   "question": "交换机用哪种类型？",
+   "targets": [
+    "topic"
+   ]
+  },
+  {
+   "id": "m26",
+   "type": "d",
+   "question": "失败重试几次？",
+   "targets": [
+    "3 次"
+   ]
+  },
+  {
+   "id": "m26",
+   "type": "d",
+   "question": "失败消息最后去哪、保留多久？",
+   "targets": [
+    "死信"
+   ]
+  },
+  {
+   "id": "m26",
+   "type": "d",
+   "question": "失败消息的最终去向与重试策略？",
+   "targets": [
+    "死信",
+    "3 次"
+   ]
+  },
+  {
+   "id": "m27",
+   "type": "d",
+   "question": "中文分词用什么？",
+   "targets": [
+    "jieba"
+   ]
+  },
+  {
+   "id": "m27",
+   "type": "d",
+   "question": "搜索延迟要求是多少？",
+   "targets": [
+    "100ms"
+   ]
+  },
+  {
+   "id": "m27",
+   "type": "d",
+   "question": "索引多久重建一次？",
+   "targets": [
+    "每小时"
+   ]
+  },
+  {
+   "id": "m27",
+   "type": "d",
+   "question": "分词与延迟指标？",
+   "targets": [
+    "jieba",
+    "100ms"
+   ]
+  },
+  {
+   "id": "m28",
+   "type": "d",
+   "question": "哪个角色不能导出？",
+   "targets": [
+    "viewer"
+   ]
+  },
+  {
+   "id": "m28",
+   "type": "d",
+   "question": "谁能改成员？",
+   "targets": [
+    "admin"
+   ]
+  },
+  {
+   "id": "m28",
+   "type": "d",
+   "question": "成员管理的权限归谁？",
+   "targets": [
+    "admin"
+   ]
+  },
+  {
+   "id": "m29",
+   "type": "d",
+   "question": "文档站部署在哪？",
+   "targets": [
+    "Vercel"
+   ]
+  },
+  {
+   "id": "m29",
+   "type": "d",
+   "question": "预览环境怎么标识？",
+   "targets": [
+    "PR 号"
+   ]
+  },
+  {
+   "id": "m29",
+   "type": "d",
+   "question": "哪个分支合并会自动发布？",
+   "targets": [
+    "main"
+   ]
+  },
+  {
+   "id": "m29",
+   "type": "d",
+   "question": "发布链路的关键点？",
+   "targets": [
+    "Vercel",
+    "main"
+   ]
+  },
+  {
+   "id": "m30",
+   "type": "d",
+   "question": "日志的固定字段有哪些？",
+   "targets": [
+    "trace_id"
+   ]
+  },
+  {
+   "id": "m30",
+   "type": "d",
+   "question": "什么内容绝对不能打？",
+   "targets": [
+    "手机号"
+   ]
+  },
+  {
+   "id": "m30",
+   "type": "d",
+   "question": "日志格式与字段要求？",
+   "targets": [
+    "trace_id",
+    "密码"
+   ]
+  },
+  {
+   "id": "m30",
+   "type": "d",
+   "question": "日志里对敏感信息的约束？",
+   "targets": [
+    "手机号",
+    "密码"
+   ]
+  },
+  {
+   "id": "m31",
+   "type": "d",
+   "question": "发布先切多少流量？",
+   "targets": [
+    "10%"
+   ]
+  },
+  {
+   "id": "m31",
+   "type": "d",
+   "question": "观察多久再全量？",
+   "targets": [
+    "30min"
+   ]
+  },
+  {
+   "id": "m31",
+   "type": "d",
+   "question": "想撤销发布时点哪里？",
+   "targets": [
+    "回滚"
+   ]
+  },
+  {
+   "id": "m31",
+   "type": "d",
+   "question": "蓝绿发布的两个参数？",
+   "targets": [
+    "10%",
+    "30min"
+   ]
+  },
+  {
+   "id": "m32",
+   "type": "d",
+   "question": "覆盖率门槛是多少？",
+   "targets": [
+    "70%"
+   ]
+  },
+  {
+   "id": "m32",
+   "type": "d",
+   "question": "e2e 什么时候跑？",
+   "targets": [
+    "nightly"
+   ]
+  },
+  {
+   "id": "m32",
+   "type": "d",
+   "question": "e2e 用什么工具？",
+   "targets": [
+    "Playwright"
+   ]
+  },
+  {
+   "id": "m32",
+   "type": "d",
+   "question": "测试的两条硬线？",
+   "targets": [
+    "70%",
+    "Playwright"
+   ]
+  },
+  {
+   "id": "m01",
+   "type": "a",
+   "question": "这个项目的 Kubernetes 集群是什么版本？"
+  },
+  {
+   "id": "m02",
+   "type": "a",
+   "question": "服务网格用的是 Istio 还是 Linkerd？"
+  },
+  {
+   "id": "m03",
+   "type": "a",
+   "question": "CDN 供应商是哪家？"
+  },
+  {
+   "id": "m04",
+   "type": "a",
+   "question": "域名是在哪注册的？"
+  },
+  {
+   "id": "m05",
+   "type": "a",
+   "question": "发票税率是多少？"
+  },
+  {
+   "id": "m06",
+   "type": "a",
+   "question": "办公室在哪个城市？"
+  },
+  {
+   "id": "m07",
+   "type": "a",
+   "question": "团队有几个人？"
+  },
+  {
+   "id": "m08",
+   "type": "a",
+   "question": "招聘流程有几轮面试？"
+  },
+  {
+   "id": "m09",
+   "type": "a",
+   "question": "代码许可证是哪一种？"
+  },
+  {
+   "id": "m10",
+   "type": "a",
+   "question": "项目的品牌色是什么色号？"
+  },
+  {
+   "id": "m11",
+   "type": "a",
+   "question": "Logo 的标准尺寸是多少？"
+  },
+  {
+   "id": "m12",
+   "type": "a",
+   "question": "推荐用哪个编辑器？"
+  },
+  {
+   "id": "m13",
+   "type": "a",
+   "question": "代码格式化用 Prettier 还是 Biome？"
+  },
+  {
+   "id": "m14",
+   "type": "a",
+   "question": "Webhook 失败重试几次？"
+  },
+  {
+   "id": "m16",
+   "type": "a",
+   "question": "邮件服务商用的是哪家？"
+  },
+  {
+   "id": "m17",
+   "type": "a",
+   "question": "短信通道是哪家？"
+  },
+  {
+   "id": "m19",
+   "type": "a",
+   "question": "支付网关接的是谁？"
+  },
+  {
+   "id": "m20",
+   "type": "a",
+   "question": "退款流程要几级审批？"
+  },
+  {
+   "id": "m21",
+   "type": "a",
+   "question": "会员等级一共几档？"
+  },
+  {
+   "id": "m22",
+   "type": "a",
+   "question": "积分规则怎么算？"
+  },
+  {
+   "id": "m23",
+   "type": "a",
+   "question": "推荐算法用的什么模型？"
+  },
+  {
+   "id": "m24",
+   "type": "a",
+   "question": "AB 实验平台是自研还是采购？"
+  },
+  {
+   "id": "m25",
+   "type": "a",
+   "question": "埋点方案是什么？"
+  },
+  {
+   "id": "m26",
+   "type": "a",
+   "question": "数据看板用什么工具？"
+  },
+  {
+   "id": "m27",
+   "type": "a",
+   "question": "告警静默规则怎么配？"
+  },
+  {
+   "id": "m28",
+   "type": "a",
+   "question": "值班表是怎么轮换的？"
+  },
+  {
+   "id": "m29",
+   "type": "a",
+   "question": "事故等级怎么定义？"
+  },
+  {
+   "id": "m30",
+   "type": "a",
+   "question": "SLA 承诺的可用性是多少？"
+  },
+  {
+   "id": "m31",
+   "type": "a",
+   "question": "RTO 和 RPO 分别是多少？"
+  },
+  {
+   "id": "m32",
+   "type": "a",
+   "question": "容灾机房在哪个区域？"
+  },
+  {
+   "id": "m01",
+   "type": "a",
+   "question": "密钥多久轮换一次？"
+  },
+  {
+   "id": "m02",
+   "type": "a",
+   "question": "密码最小长度要求是多少？"
+  },
+  {
+   "id": "m03",
+   "type": "a",
+   "question": "是否强制双因素认证？"
+  },
+  {
+   "id": "m04",
+   "type": "a",
+   "question": "审计日志保留多久？"
+  },
+  {
+   "id": "m05",
+   "type": "a",
+   "question": "数据删除请求的处理时限？"
+  },
+  {
+   "id": "m06",
+   "type": "a",
+   "question": "跨境数据传输走什么通道？"
+  },
+  {
+   "id": "m07",
+   "type": "a",
+   "question": "供应商准入走什么审批？"
+  },
+  {
+   "id": "m08",
+   "type": "a",
+   "question": "采购预算上限是多少？"
+  },
+  {
+   "id": "m09",
+   "type": "a",
+   "question": "周会是什么时候？"
+  },
+  {
+   "id": "m10",
+   "type": "a",
+   "question": "周报模板在哪？"
+  },
+  {
+   "id": "m11",
+   "type": "a",
+   "question": "代码评审的 SLA 是多久？"
+  },
+  {
+   "id": "m12",
+   "type": "a",
+   "question": "分支命名规范是什么？"
+  },
+  {
+   "id": "m13",
+   "type": "a",
+   "question": "commit message 用什么规范？"
+  },
+  {
+   "id": "m14",
+   "type": "a",
+   "question": "版本号遵循什么规则？"
+  },
+  {
+   "id": "m16",
+   "type": "a",
+   "question": "发布窗口是哪几天？"
+  },
+  {
+   "id": "m17",
+   "type": "a",
+   "question": "数据库分库规则是什么？"
+  },
+  {
+   "id": "m19",
+   "type": "a",
+   "question": "缓存 TTL 默认多少？"
+  },
+  {
+   "id": "m20",
+   "type": "a",
+   "question": "SDK 支持哪几种语言？"
+  },
+  {
+   "id": "m21",
+   "type": "a",
+   "question": "API 版本策略是什么？"
+  },
+  {
+   "id": "m01",
+   "type": "b",
+   "question": "用的是哪种鉴权方案？",
+   "targets": [
+    "JWT"
+   ]
+  },
+  {
+   "id": "m02",
+   "type": "b",
+   "question": "用户文档用什么语言？",
+   "targets": [
+    "中文"
+   ]
+  },
+  {
+   "id": "m04",
+   "type": "b",
+   "question": "哪些操作前要先备份？",
+   "targets": [
+    "迁移"
+   ]
+  },
+  {
+   "id": "m06",
+   "type": "b",
+   "question": "缺哪个请求头会失败？",
+   "targets": [
+    "X-Tenant-Id"
+   ]
+  },
+  {
+   "id": "m08",
+   "type": "b",
+   "question": "原来的方案是什么？",
+   "targets": [
+    "正则"
+   ]
+  },
+  {
+   "id": "m08",
+   "type": "b",
+   "question": "替代方案是哪个库？",
+   "targets": [
+    "cheerio"
+   ]
+  },
+  {
+   "id": "m10",
+   "type": "b",
+   "question": "装 Python 包用什么工具？",
+   "targets": [
+    "uv"
+   ]
+  },
+  {
+   "id": "m11",
+   "type": "b",
+   "question": "这件事定在哪天？",
+   "targets": [
+    "演示"
+   ]
+  },
+  {
+   "id": "m12",
+   "type": "b",
+   "question": "他希望的汇报顺序是什么？",
+   "targets": [
+    "结论"
+   ]
+  },
+  {
+   "id": "m17",
+   "type": "b",
+   "question": "上次是什么类型的故障？",
+   "targets": [
+    "雪崩"
+   ]
+  },
+  {
+   "id": "m20",
+   "type": "b",
+   "question": "CI 用的平台名字是什么？",
+   "targets": [
+    "Actions"
+   ]
+  },
+  {
+   "id": "m01",
+   "type": "a",
+   "question": "测试环境的域名是什么？"
+  },
+  {
+   "id": "m02",
+   "type": "a",
+   "question": "灰度发布用的是什么工具？"
+  },
+  {
+   "id": "m03",
+   "type": "a",
+   "question": "数据库连接池默认多大？"
+  },
+  {
+   "id": "m04",
+   "type": "a",
+   "question": "图片存在哪？"
+  },
+  {
+   "id": "m05",
+   "type": "a",
+   "question": "静态资源怎么加速？"
+  },
+  {
+   "id": "m06",
+   "type": "a",
+   "question": "前端打包产物多大？"
+  },
+  {
+   "id": "m07",
+   "type": "a",
+   "question": "有没有做 SSR？"
+  },
+  {
+   "id": "m08",
+   "type": "a",
+   "question": "移动端用 Flutter 还是原生？"
+  },
+  {
+   "id": "m09",
+   "type": "a",
+   "question": "桌面端支持哪些系统？"
+  },
+  {
+   "id": "m10",
+   "type": "a",
+   "question": "浏览器最低支持到哪个版本？"
+  },
+  {
+   "id": "m11",
+   "type": "a",
+   "question": "有没有无障碍要求？"
+  },
+  {
+   "id": "m12",
+   "type": "a",
+   "question": "字体用的什么？"
+  },
+  {
+   "id": "m13",
+   "type": "a",
+   "question": "图标库是哪套？"
+  },
+  {
+   "id": "m14",
+   "type": "a",
+   "question": "表单校验库用的什么？"
+  },
+  {
+   "id": "m16",
+   "type": "a",
+   "question": "状态持久化用的什么？"
+  },
+  {
+   "id": "m17",
+   "type": "a",
+   "question": "路由用的是什么？"
+  },
+  {
+   "id": "m19",
+   "type": "a",
+   "question": "请求库用的是 axios 还是 fetch？"
+  },
+  {
+   "id": "m20",
+   "type": "a",
+   "question": "接口文档用什么生成？"
+  },
+  {
+   "id": "m21",
+   "type": "a",
+   "question": "Mock 数据怎么造？"
+  },
+  {
+   "id": "m22",
+   "type": "a",
+   "question": "单元测试框架是什么？"
+  },
+  {
+   "id": "m23",
+   "type": "a",
+   "question": "覆盖率报告发到哪？"
+  },
+  {
+   "id": "m24",
+   "type": "a",
+   "question": "代码扫描用什么工具？"
+  },
+  {
+   "id": "m25",
+   "type": "a",
+   "question": "依赖升级策略是什么？"
+  },
+  {
+   "id": "m26",
+   "type": "a",
+   "question": "有没有做性能预算？"
+  },
+  {
+   "id": "m01",
+   "type": "a",
+   "question": "有没有做链路的容量规划？"
+  },
+  {
+   "id": "m02",
+   "type": "a",
+   "question": "团队用什么即时通讯工具？"
+  }
+ ]
+}

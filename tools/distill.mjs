@@ -20,7 +20,8 @@ import { lintBody, stripTail, normalize, factPresent, identifiers } from '../pac
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, '../..');
-const corpus = JSON.parse(fs.readFileSync(path.join(repo, 'aiw', 'corpus.json'), 'utf8'));
+const { loadCorpus } = await import('../packages/loom-core/src/eval-data.js');
+const corpus = loadCorpus();
 
 const argv = process.argv.slice(2);
 const arg = (k, d) => {
