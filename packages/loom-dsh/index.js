@@ -392,8 +392,22 @@ export function apply(ctx, config = {}) {
       kind: 'exact',
       path: '/loom/state',
       handler: async (req, res) => {
+        // 页面可能来自 dsh-app:// 这类自定义协议，属于跨源：要显式允许
+        if (req?.method === 'OPTIONS') {
+          res.writeHead(204, {
+            'access-control-allow-origin': '*',
+            'access-control-allow-methods': 'GET, OPTIONS',
+            'access-control-max-age': '600',
+          });
+          res.end();
+          return;
+        }
         try {
-          res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
+          res.writeHead(200, {
+            'content-type': 'application/json; charset=utf-8',
+            'cache-control': 'no-store',
+            'access-control-allow-origin': '*',
+          });
           res.end(JSON.stringify(snapshotForPanel()));
         } catch (e) {
           res.writeHead(500, { 'content-type': 'application/json' });

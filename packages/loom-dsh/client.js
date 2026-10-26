@@ -43,6 +43,8 @@ window.__ModuleLoader__.load({
 
       try {
         out.bootKeys = Object.keys(window.__DSH_BOOT__ || {}).slice(0, 20);
+        const t = window.__DSH_TRANSPORT__;
+        out.transport = typeof t === 'string' ? t.slice(0, 80) : (t && typeof t === 'object' ? Object.keys(t).slice(0, 12) : String(t));
         out.globalHost = typeof globalThis.host;
         out.windowHost = typeof window.host;
       } catch {}
@@ -93,6 +95,34 @@ window.__ModuleLoader__.load({
       );
     }
 
+    /** 页面可能跑在 dsh-app:// 上，这时 /loom/state 必须用宿主的绝对地址 */
+    function hostOrigin() {
+      const pick = [];
+      const t = window.__DSH_TRANSPORT__;
+      if (typeof t === 'string') pick.push(t);
+      if (t && typeof t === 'object') {
+        for (const k of ['url', 'origin', 'baseUrl', 'endpoint', 'http', 'httpUrl', 'host']) {
+          if (typeof t[k] === 'string') pick.push(t[k]);
+        }
+      }
+      const boot = window.__DSH_BOOT__;
+      if (boot && typeof boot === 'object') {
+        for (const k of ['origin', 'url', 'baseUrl', 'host']) {
+          if (typeof boot[k] === 'string') pick.push(boot[k]);
+        }
+      }
+      for (const raw of pick) {
+        try {
+          const u = new URL(raw, location.href);
+          if (u.protocol === 'http:' || u.protocol === 'https:') return u.origin;
+          // 传输层常见是 ws/wss：同主机的 http 端点即可
+          if (u.protocol === 'ws:') return 'http://' + u.host;
+          if (u.protocol === 'wss:') return 'https://' + u.host;
+        } catch {}
+      }
+      return /^https?:$/.test(location.protocol) ? location.origin : null;
+    }
+
     function Panel() {
       // 首屏优先用宿主注入的种子，避免"打开面板先空一下"
       const seed = (typeof window !== 'undefined' && window.__LOOM_SEED__) || null;
@@ -104,11 +134,12 @@ window.__ModuleLoader__.load({
 
       const load = React.useCallback(() => {
         setState((s) => ({ ...s, loading: true, error: null }));
-        if (!httpMode) {
+        const base = hostOrigin();
+        if (!base) {
           setState({ loading: false, data: seed, error: 'desktop-mode' });
           return;
         }
-        fetch('/loom/state', { credentials: 'same-origin' })
+        fetch(base + '/loom/state', { credentials: 'omit' })
           .then((r) => {
             if (!r.ok) throw new Error('HTTP ' + r.status);
             return r.json();
