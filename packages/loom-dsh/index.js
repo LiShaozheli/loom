@@ -516,6 +516,45 @@ export function apply(ctx, config = {}) {
       },
     });
 
+    // 文档详情：/loom/doc?id=xxx（含历史版本）
+    web.register({
+      kind: 'exact',
+      path: '/loom/doc',
+      handler: async (req, res) => {
+        const cors = { 'access-control-allow-origin': '*', 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' };
+        try {
+          const url = new URL(req?.url ?? '/', 'http://localhost');
+          const id = String(url.searchParams.get('id') ?? '').trim();
+          if (!id) {
+            res.writeHead(400, cors);
+            res.end(JSON.stringify({ ok: false, error: '缺少 id' }));
+            return;
+          }
+          const doc = ledger.getDoc(id);
+          if (!doc) {
+            res.writeHead(404, cors);
+            res.end(JSON.stringify({ ok: false, error: '找不到这篇文档' }));
+            return;
+          }
+          const revs = (ledger.docRevisions?.(id) ?? []).map((r) => ({
+            rev: r.rev,
+            at: r.at,
+            title: r.title,
+            body: String(r.body ?? '').slice(0, 4000),
+          }));
+          res.writeHead(200, cors);
+          res.end(JSON.stringify({
+            ok: true,
+            doc: { id: doc.id, title: doc.title, body: doc.body, tags: doc.tags, updatedAt: doc.updated_at },
+            revs,
+          }));
+        } catch (e) {
+          res.writeHead(500, cors);
+          res.end(JSON.stringify({ ok: false, error: String(e?.message ?? e) }));
+        }
+      },
+    });
+
     // 打包下载：/loom/export.zip
     web.register({
       kind: 'exact',

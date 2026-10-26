@@ -99,6 +99,8 @@ window.__ModuleLoader__.load({
       const [saved, setSaved] = React.useState(null);
       const [q, setQ] = React.useState('');
       const [hits, setHits] = React.useState(null);
+      const [docOpen, setDocOpen] = React.useState(null);
+      const [docView, setDocView] = React.useState(null);
       const base = hostOrigin();
 
       const load = React.useCallback(() => {
@@ -114,6 +116,17 @@ window.__ModuleLoader__.load({
       }, [base, seed]);
 
       React.useEffect(() => { load(); }, [load]);
+
+      const openDoc = (id) => {
+        if (!base) return;
+        if (docOpen === id) { setDocOpen(null); setDocView(null); return; }
+        setDocOpen(id);
+        setDocView({ loading: true });
+        fetch(base + '/loom/doc?id=' + encodeURIComponent(id), { credentials: 'omit' })
+          .then((r) => r.json())
+          .then((r) => setDocView(r.ok ? r : { error: r.error }))
+          .catch((e) => setDocView({ error: e.message }));
+      };
 
       const search = (word) => {
         if (!base) return;
@@ -220,8 +233,26 @@ window.__ModuleLoader__.load({
         const docs = (d && d.docs) || [];
         body = docs.length
           ? docs.map((doc) => h('div', { key: doc.id, style: C.card },
-              h('div', { style: C.label }, doc.title),
-              h('div', { style: C.meta }, ((doc.tags || '') + ' · ' + doc.id).replace(/^ · /, ''))))
+              h('div', { style: C.row },
+                h('span', { style: C.label }, doc.title),
+                h('button', { type: 'button', style: C.btn, onClick: () => openDoc(doc.id) },
+                  docOpen === doc.id ? '收起' : '查看')),
+              h('div', { style: C.meta }, ((doc.tags || '') + ' · ' + doc.id).replace(/^ · /, '')),
+              docOpen === doc.id && docView
+                ? docView.loading
+                  ? h('div', { style: C.meta }, '读取中…')
+                  : docView.error
+                    ? h('div', { style: C.err }, '读取失败：' + docView.error)
+                    : h('div', null,
+                        h('div', { style: { ...C.text, marginTop: 8 } }, (docView.doc && docView.doc.body) || ''),
+                        (docView.revs || []).length > 1
+                          ? h('div', { style: { marginTop: 10 } },
+                              h('div', { style: C.meta }, '历史版本（' + docView.revs.length + '）'),
+                              docView.revs.slice(1).map((r) => h('div', { key: r.rev, style: { ...C.card, marginTop: 6 } },
+                                h('div', { style: C.meta }, 'v' + r.rev + ' · ' + new Date(r.at).toLocaleString()),
+                                h('div', { style: C.text }, r.body))))
+                          : null)
+                : null))
           : h('div', { style: C.empty }, '还没有项目文档。');
       }
 
