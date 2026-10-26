@@ -39,6 +39,14 @@ flowchart TD
 完整架构（写入/读取时序、模块地图、落盘布局、不变量）见
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
 
+## 文档
+
+| 文档 | 内容 |
+| --- | --- |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 架构：分层、写入/读取时序、模块地图、落盘布局、不变量 |
+| [docs/AIW.md](docs/AIW.md) | AI文：为什么压缩会丢信息、token 实测、符号表边际收益、生成约束 |
+| [REPLACE-MNEMON.md](REPLACE-MNEMON.md) | 与 dsh-mnemon 的差距清单与判据 |
+
 ## 快速开始
 
 ```bash
