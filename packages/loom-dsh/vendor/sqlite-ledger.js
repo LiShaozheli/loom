@@ -91,23 +91,98 @@ CREATE VIRTUAL TABLE IF NOT EXISTS doc_fts USING fts5(
 );
 `;
 
+/**
+ * 表结构版本：写在 SQLite 头里的 PRAGMA user_version。
+ *
+ * 早期是「探测某列在不在，不在就 ALTER」。那套只够表达「加一列」，
+ * 一旦要做改默认值、拆表、重建索引，探测就写不出正确的顺序了；
+ * 而且它没有记录——没人知道这份库停在哪个版本，只能靠猜。
+ */
+export const SCHEMA_VERSION = 2;
+
+/**
+ * 迁移按 version 升序执行，每一步是原子的：失败就整体回滚，
+ * 不会留下「列加上了但版本没涨」这种半截状态。
+ */
+const MIGRATIONS = [
+  {
+    version: 1,
+    name: '基础表结构',
+    // DDL 全是 IF NOT EXISTS，走到这里表结构已经就位，无需动作
+    up: () => {},
+  },
+  {
+    version: 2,
+    name: 'claim 记所属会话（隔离会话用）',
+    up: (db) => {
+      const has = db
+        .prepare("SELECT name FROM pragma_table_info('claim')")
+        .all()
+        .some((c) => c.name === 'session_id');
+      if (!has) db.exec('ALTER TABLE claim ADD COLUMN session_id TEXT');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_claim_session ON claim(session_id)');
+    },
+  },
+];
+
 export class SqliteLedger {
   constructor(file = ':memory:') {
     this.db = new DatabaseSync(file);
-    this.db.exec(DDL);
-
-    // 老库迁移：早期没有 session_id 列
-    const hasSessionColumn = this.db
-      .prepare("SELECT name FROM pragma_table_info('claim')")
-      .all()
-      .some((c) => c.name === 'session_id');
-    if (!hasSessionColumn) {
-      this.db.exec('ALTER TABLE claim ADD COLUMN session_id TEXT');
+    try {
+      this.db.exec(DDL);
+      this.#migrate();
+    } catch (e) {
+      // 迁移失败必须关掉句柄：否则 Windows 上文件被独占，
+      // 调用方连「删掉坏库重来」都做不到（测试里就是 unlink 报 EBUSY）
+      try {
+        this.db.close();
+      } catch {
+        /* 关不掉也要把原始错误抛出去 */
+      }
+      throw e;
     }
-    this.db.exec('CREATE INDEX IF NOT EXISTS idx_claim_session ON claim(session_id)');
+  }
+
+  #migrate() {
+    const current = this.schemaVersion();
+    if (current > SCHEMA_VERSION) {
+      throw new Error(
+        `账本版本 ${current} 比当前代码支持的 ${SCHEMA_VERSION} 还新，请升级 LOOM 而不是降级数据`
+      );
+    }
+    for (const m of MIGRATIONS) {
+      if (m.version <= current) continue;
+      this.db.exec('BEGIN');
+      try {
+        m.up(this.db);
+        // 版本号只来自上面的常量表，不接外部输入
+        this.db.exec(`PRAGMA user_version = ${m.version}`);
+        this.db.exec('COMMIT');
+      } catch (e) {
+        try {
+          this.db.exec('ROLLBACK');
+        } catch {
+          /* 回滚失败也要把原始错误抛出去 */
+        }
+        throw new Error(`账本迁移到 v${m.version}（${m.name}）失败：${e?.message ?? e}`);
+      }
+    }
+  }
+
+  /** 当前表结构版本，测试和诊断用 */
+  schemaVersion() {
+    const row = this.db.prepare('PRAGMA user_version').get();
+    return Number(row?.user_version ?? Object.values(row ?? {})[0] ?? 0) || 0;
   }
 
   close() {
+    // 长连接跑过大量写入后，让 SQLite 自己决定要不要更新统计信息，
+    // 下次打开时查询计划才不会退化（官方推荐在关闭前调一次）
+    try {
+      this.db.exec('PRAGMA optimize');
+    } catch {
+      /* 统计信息优化失败不影响关闭 */
+    }
     this.db.close();
   }
 

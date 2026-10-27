@@ -52,9 +52,13 @@ export function importBundle(ledger, bundle, opts = {}) {
 
   for (const c of bundle.claims ?? []) {
     if (!c?.id || !c?.aiw) continue;
+    // 缺 taint 的条目来源不明（手工拼的包、第三方导出），按外部内容对待：
+    // 照样入库、照样能被 recall 查到，但不进每轮自动注入。
+    // LOOM 自己导出的条目带 taint:'none'，来回导不会被降级。
+    const claim = c.taint ? c : { ...c, taint: 'external' };
     if (opts.replace) {
       // 覆盖模式：直接重放
-      ledger.put(c);
+      ledger.put(claim);
       added++;
       continue;
     }
@@ -62,7 +66,7 @@ export function importBundle(ledger, bundle, opts = {}) {
       skipped++;
       continue;
     }
-    ledger.put(c);
+    ledger.put(claim);
     added++;
   }
 
