@@ -43,7 +43,7 @@ export function decayScore(claim, opts = {}) {
 
   const base = claim.lastUsedAt ?? claim.validFrom ?? now;
   const days = Math.max(0, (now - base) / DAY);
-  const decayed = Math.pow(0.5, days / halfLife);
+  const decayed = 0.5 ** (days / halfLife);
 
   // 用进废退：用过 3 次 ≈ ×1.55，用过 10 次 ≈ ×2.2
   const boosted = 1 + Math.log1p(claim.useCount ?? 0) / 2;

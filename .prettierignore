@@ -1,5 +1,0 @@
-node_modules/
-.npm-cache/
-packages/loom-dsh/vendor/
-package-lock.json
-*.md

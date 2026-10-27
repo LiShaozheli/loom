@@ -64,7 +64,10 @@ function boot(dbPath, server = makeServer()) {
     routes,
     sections,
     server,
-    dispose: () => cleanups.forEach((c) => c()),
+    dispose: () =>
+      cleanups.forEach((c) => {
+        c();
+      }),
     hotText: () =>
       sections
         .filter((s) => s.name === 'loom-hot-memory')

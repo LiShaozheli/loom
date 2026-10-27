@@ -1,0 +1,58 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.6.3/schema.json",
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "files": {
+    "includes": [
+      "**/*.js",
+      "**/*.mjs",
+      "!**/node_modules",
+      "!**/.npm-cache",
+      "!**/packages/loom-dsh/vendor",
+      "!**/test/fixtures"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100,
+    "lineEnding": "lf"
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "single",
+      "jsxQuoteStyle": "double",
+      "semicolons": "always",
+      "trailingCommas": "es5",
+      "arrowParentheses": "always"
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "complexity": {
+        "noForEach": "off",
+        "useOptionalChain": "off",
+        "noCommaOperator": "off"
+      },
+      "suspicious": {
+        "noExplicitAny": "off",
+        "noAssignInExpressions": "off",
+        "useAwait": "off",
+        "noConfusingVoidType": "off"
+      },
+      "style": {
+        "noNonNullAssertion": "off",
+        "noParameterAssign": "off",
+        "useTemplate": "off",
+        "noInferrableTypes": "off"
+      },
+      "correctness": {
+        "noUnusedVariables": "error",
+        "noUnusedFunctionParameters": "off"
+      }
+    }
+  },
+  "assist": { "actions": { "source": { "organizeImports": "off" } } }
+}

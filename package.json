@@ -30,19 +30,17 @@
     "reindex": "node tools/reindex.mjs",
     "vendor:sync": "node tools/vendor-sync.mjs",
     "vendor:check": "node tools/vendor-sync.mjs --check",
-    "lint": "eslint .",
-    "lint:fix": "eslint . --fix",
-    "format": "prettier --write \"packages/loom-core/{src,bin,test}/**/*.js\" \"packages/loom-dsh/*.js\" \"tools/**/*.mjs\"",
-    "format:check": "prettier --check \"packages/loom-core/{src,bin,test}/**/*.js\" \"packages/loom-dsh/*.js\" \"tools/**/*.mjs\"",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
     "typecheck": "tsc -p tsconfig.json",
-    "check": "npm run vendor:check && npm run lint && npm run format:check && npm test && npm run verify",
+    "check": "npm run vendor:check && npm run lint && npm test && npm run verify",
     "migrate": "node tools/migrate.mjs"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.6.3",
     "@types/node": "^26.6.5",
-    "eslint": "^9.39.5",
-    "globals": "^17.13.0",
-    "prettier": "^3.9.10",
     "typescript": "^7.0.2"
   }
 }

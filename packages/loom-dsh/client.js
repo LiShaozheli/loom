@@ -1048,24 +1048,22 @@ outline:2px solid var(--lm-brand);outline-offset:2px}
                                     { className: 'lm-meta' },
                                     '历史版本（' + docView.revs.length + '）'
                                   ),
-                                  docView.revs
-                                    .slice(1)
-                                    .map((r) =>
+                                  docView.revs.slice(1).map((r) =>
+                                    h(
+                                      'div',
+                                      {
+                                        key: r.rev,
+                                        className: 'lm-card pad',
+                                        style: { marginTop: 6, background: 'transparent' },
+                                      },
                                       h(
                                         'div',
-                                        {
-                                          key: r.rev,
-                                          className: 'lm-card pad',
-                                          style: { marginTop: 6, background: 'transparent' },
-                                        },
-                                        h(
-                                          'div',
-                                          { className: 'lm-meta' },
-                                          'v' + r.rev + ' · ' + new Date(r.at).toLocaleString()
-                                        ),
-                                        h('div', { className: 'lm-text' }, r.body)
-                                      )
+                                        { className: 'lm-meta' },
+                                        'v' + r.rev + ' · ' + new Date(r.at).toLocaleString()
+                                      ),
+                                      h('div', { className: 'lm-text' }, r.body)
                                     )
+                                  )
                                 )
                               : null
                           )

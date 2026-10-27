@@ -6,7 +6,6 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-
 import { ingest } from '../src/ingest.js';
 import { allocate } from '../src/allocate.js';
 import { recall } from '../src/recall.js';

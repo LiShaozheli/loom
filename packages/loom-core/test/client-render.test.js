@@ -107,7 +107,9 @@ function walk(node, visit, depth = 0) {
     return;
   }
   if (Array.isArray(node)) {
-    node.forEach((n) => walk(n, visit, depth));
+    node.forEach((n) => {
+      walk(n, visit, depth);
+    });
     return;
   }
   if (typeof node.type === 'function') {
@@ -117,7 +119,9 @@ function walk(node, visit, depth = 0) {
     return;
   }
   visit({ el: node, depth });
-  (node.children || []).forEach((c) => walk(c, visit, depth + 1));
+  (node.children || []).forEach((c) => {
+    walk(c, visit, depth + 1);
+  });
 }
 
 function collect(tree) {
