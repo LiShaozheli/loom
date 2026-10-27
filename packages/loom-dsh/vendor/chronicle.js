@@ -189,12 +189,15 @@ export class Chronicle {
     const head = this.heads.get(epochId);
     const rec = this.meta.epochs[epochId];
     if (!head || !rec) return;
-    rec.head = { seq: head.seq, hash: head.hash, size: head.size };
+    const anchor = { seq: head.seq, hash: head.hash, size: head.size };
+    // 分类计数跟着锚点走：面板要显示「多少条原文」时不必解密整个档案
+    if (head.kinds) anchor.kinds = head.kinds;
+    rec.head = anchor;
     try {
       this.#save({ anchorOnly: true });
       // #save 之后 this.meta 是合并结果，重新取一次引用
       const again = this.meta.epochs[epochId];
-      if (again) again.head = { seq: head.seq, hash: head.hash, size: head.size };
+      if (again) again.head = anchor;
     } catch {
       // 锚点写不进去不能挡住记忆落盘：链本身仍然有效，只是少了截断检测
     }
@@ -338,7 +341,9 @@ export class Chronicle {
       head = { size: 0, seq: 0, hash: 'GENESIS' };
     } else {
       const last = this.#lastRecord(logPath, size);
-      head = { size, seq: (last.seq ?? 0) + 1, hash: last.hash };
+      // kinds 只能从锚点继承：重建 head 时不想为了分类计数去解密整个档案
+      const kinds = this.meta.epochs[epochId]?.head?.kinds;
+      head = { size, seq: (last.seq ?? 0) + 1, hash: last.hash, ...(kinds ? { kinds } : {}) };
     }
     this.heads.set(epochId, head);
     return head;
@@ -353,6 +358,9 @@ export class Chronicle {
     let out;
     try {
       const head = this.#head(epochId, logPath); // 持锁后再取，避免两个进程拿到同一个 seq
+      const kind = typeof event?.kind === 'string' ? event.kind : 'other';
+      const kinds = { ...(head.kinds ?? {}) };
+      kinds[kind] = (kinds[kind] ?? 0) + 1;
       const record = {
         seq: head.seq,
         at: Date.now(),
@@ -369,7 +377,7 @@ export class Chronicle {
       } finally {
         fs.closeSync(fd);
       }
-      this.heads.set(epochId, { size: head.size + bytes, seq: head.seq + 1, hash: record.hash });
+      this.heads.set(epochId, { size: head.size + bytes, seq: head.seq + 1, hash: record.hash, kinds });
       out = { hash: record.hash, prevHash: head.hash, seq: head.seq };
     } finally {
       lock.release();
@@ -393,12 +401,142 @@ export class Chronicle {
     const lastRec = lines.length ? JSON.parse(lines[lines.length - 1]) : null;
     let size = 0;
     try { size = fs.statSync(logPath).size; } catch { /* 刚被删 */ }
+    // 顺手把分类计数纠正一遍：这是唯一一次「全量已知」，之后靠 append 自增
+    const kinds = {};
+    for (const r of out) {
+      const k = typeof r.event?.kind === 'string' ? r.event.kind : 'other';
+      kinds[k] = (kinds[k] ?? 0) + 1;
+    }
     this.heads.set(epochId, {
       size,
       seq: lines.length,
       hash: lastRec ? lastRec.hash : 'GENESIS',
+      kinds,
     });
     return out;
+  }
+
+  /**
+   * 当前 head（O(1)：一次 stat，必要时读尾部 chunk）。
+   * 面板要显示规模时用它，别为了一个数字去解密整个档案。
+   * @returns {{seq:number, size:number, hash:string, kinds?:Record<string,number>}}
+   */
+  head(epochId) {
+    this.#refreshMeta();
+    return this.#head(epochId, this.#logPath(epochId));
+  }
+
+  /**
+   * 只解密最后 n 条记录。
+   * 「最近聊了什么」不需要把 6.7MB 全解一遍；从文件尾部倒着读够 n 条就行。
+   */
+  tail(epochId, n = 50) {
+    this.#refreshMeta();
+    const key = this.#keyOf(epochId);
+    const logPath = this.#logPath(epochId);
+    if (!fs.existsSync(logPath)) return [];
+    const size = fs.statSync(logPath).size;
+    if (size === 0) return [];
+    const want = Math.max(1, n | 0);
+
+    let chunk = TAIL_CHUNK;
+    for (;;) {
+      const start = Math.max(0, size - chunk);
+      const len = size - start;
+      const buf = Buffer.alloc(len);
+      const fd = fs.openSync(logPath, 'r');
+      try { fs.readSync(fd, buf, 0, len, start); } finally { fs.closeSync(fd); }
+      const lines = buf.toString('utf8').split('\n').filter(Boolean);
+      const usable = start === 0 ? lines : lines.slice(1); // 从中间开始的第一行是半行
+      if (usable.length >= want || start === 0) {
+        return usable.slice(-want).map((line) => {
+          const rec = JSON.parse(line);
+          return { seq: rec.seq, at: rec.at, event: JSON.parse(open(key, rec.payload)) };
+        });
+      }
+      chunk *= 4;
+    }
+  }
+
+  /**
+   * 规模统计（O(1)）：条数、字节数、按 kind 的计数。
+   * kinds 缺失（升级前写的档案）才读一次全量补上，之后靠 append 自增。
+   */
+  stats(epochId) {
+    const head = this.head(epochId);
+    if (!head.kinds && head.seq > 0) {
+      try {
+        this.read(epochId); // read 会把 kinds 纠正进 heads
+        const healed = this.heads.get(epochId);
+        if (healed) return { records: healed.seq, bytes: healed.size, kinds: healed.kinds ?? {} };
+      } catch {
+        // 读不出来（密钥丢了/文件坏了）就只报条数
+      }
+    }
+    return { records: head.seq, bytes: head.size, kinds: head.kinds ?? {} };
+  }
+
+  /**
+   * 增量验链：只校验「上次验过之后新写的那一段」，用于面板的实时指示灯。
+   *
+   * 为什么不直接 verify：面板每开一次都要全链重算（6.7MB 约 24ms），
+   * 而链是追加写的 —— 上次已验证过的前缀，其末尾 hash 就是可信锚点，
+   * 从这里往后接着算即可，代价与增量成正比。
+   *
+   * 代价与边界（诚实记录）：文件**变短**或检查点丢失时才回落到全量 verify；
+   * 同尺寸的原位篡改不会被这里发现 —— 审计请用 verify()／CLI `loom verify`。
+   */
+  verifyFast(epochId) {
+    this.#refreshMeta();
+    const rec = this.meta.epochs[epochId];
+    const anchored = rec?.head;
+    const logPath = this.#logPath(epochId);
+
+    let size = 0;
+    try { size = fs.statSync(logPath).size; } catch { size = 0; }
+    if (size === 0) {
+      if (anchored && anchored.seq > 0) {
+        return { ok: false, reason: `日志文件缺失（锚点记录 ${anchored.seq} 条）` };
+      }
+      return { ok: true, count: 0 };
+    }
+
+    const verified = rec?.verified;
+    // 没有检查点，或文件比检查点还短（可能被截断）→ 老老实实全量
+    if (!verified || size < verified.size) return this.verify(epochId);
+
+    let prev = verified.hash;
+    let seq = verified.seq;
+    if (size > verified.size) {
+      const len = size - verified.size;
+      const buf = Buffer.alloc(len);
+      const fd = fs.openSync(logPath, 'r');
+      try { fs.readSync(fd, buf, 0, len, verified.size); } finally { fs.closeSync(fd); }
+      const lines = buf.toString('utf8').split('\n').filter(Boolean);
+      for (const [i, line] of lines.entries()) {
+        let r;
+        try { r = JSON.parse(line); } catch { return { ok: false, at: seq, reason: '末尾记录不完整' }; }
+        const { hash, ...rest } = r;
+        if (sha256(JSON.stringify(rest)) !== hash) return { ok: false, at: seq, reason: 'hash mismatch' };
+        if (r.prevHash !== prev) return { ok: false, at: seq, reason: 'chain broken' };
+        prev = hash;
+        seq++;
+      }
+    }
+
+    if (anchored && seq < anchored.seq) {
+      return { ok: false, reason: `尾部被截断：锚点 ${anchored.seq} 条，实际 ${seq} 条` };
+    }
+    if (anchored && anchored.seq > 0 && prev !== anchored.hash) {
+      return { ok: false, reason: '末尾 hash 与锚点不符' };
+    }
+
+    // 记下「已验证到哪个字节」，下次只用校验增量
+    if (!verified || verified.seq !== seq || verified.size !== size) {
+      rec.verified = { seq, hash: prev, size };
+      try { this.#save({ anchorOnly: true }); } catch { /* 写不进就下次再算 */ }
+    }
+    return { ok: true, count: seq };
   }
 
   /** 验链：逐条重算 hash、确认 prevHash 指向前一条，并与 head 锚点比对（防截断） */
@@ -426,6 +564,14 @@ export class Chronicle {
     }
     if (anchored && anchored.seq > 0 && prev !== anchored.hash) {
       return { ok: false, reason: '末尾 hash 与锚点不符' };
+    }
+    // 全量验过就落一个检查点，让面板之后的 verifyFast 只算增量
+    const rec = this.meta.epochs[epochId];
+    if (rec) {
+      let size = 0;
+      try { size = fs.statSync(logPath).size; } catch { /* 刚被删 */ }
+      rec.verified = { seq: lines.length, hash: prev, size };
+      try { this.#save({ anchorOnly: true }); } catch { /* 不影响验链结论 */ }
     }
     return { ok: true, count: lines.length };
   }

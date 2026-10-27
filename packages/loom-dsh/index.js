@@ -26,6 +26,8 @@ import { runLoomCommand } from './vendor/command.js';
 import { Chronicle } from './vendor/chronicle.js';
 import { exportBundle, bundleToZip, importBundle, zipToBundle } from './vendor/bundle.js';
 import { SqliteLedger } from './vendor/sqlite-ledger.js';
+import { SETTING_SPECS, normalizeSetting, validateChange } from './vendor/settings.js';
+import { appendRotating } from './vendor/logfile.js';
 
 const text = (s) => [{ type: 'text', text: String(s) }];
 
@@ -199,11 +201,17 @@ export function apply(ctx, config = {}) {
 
   // 失败留痕。必须定义在 apply 最前面：下面装 prompt section 时就要用到它。
   // （以前它在 300 行开外，谁想在 section 里引用就先撞 TDZ，于是只能裸调用，一抛就整轮完蛋）
+  // 带级别、并且按大小轮转：这个文件原来只追加不清理，长到 98KB 也没人发现。
+  // 级别只是个固定词，方便 `grep ERROR hook-errors.log` 跳过正常流水。
   const hookLog = (err, note) => {
     if (!err && !note) return;
     try {
-      const line = err ? String(err?.stack ?? err) : String(note);
-      fs.appendFileSync(path.join(path.dirname(dbPath), 'hook-errors.log'), `${new Date().toISOString()} ${line}\n`);
+      const level = err ? 'ERROR' : 'NOTE';
+      const body = err ? String(err?.stack ?? err) : String(note);
+      appendRotating(
+        path.join(path.dirname(dbPath), 'hook-errors.log'),
+        `${new Date().toISOString()} ${level} ${body}\n`,
+      );
     } catch {}
   };
   SHARED.log = hookLog;
@@ -236,12 +244,6 @@ export function apply(ctx, config = {}) {
     if (SHARED.live === myLive) SHARED.live = null;
     conn.release();
   });
-
-  /** 面板允许改的配置键（白名单，避免任意写配置） */
-  const SETTABLE = new Set([
-    'budget', 'hot', 'hotBytes', 'protocol', 'autoCapture', 'autoCaptureLevel', 'epochDays', 'render', 'scope', 'dbPath',
-    'memoryScope', 'isolatedSessions',
-  ]);
 
   // Cordis 的服务代理对未声明 inject 的属性访问会抛错（?. 挡不住），
   // 所以一律走 ctx.get()，并且整体兜底：注入失败不影响工具注册。
@@ -560,53 +562,93 @@ export function apply(ctx, config = {}) {
   // ---- 面板数据：/loom/state 路由 + 首屏种子 ----
   // webServer 不是启动即有：Cordis 文档明确说依赖它的注册要"服务就绪时"才发生。
   // 所以用 ctx.inject 等它，而不是在 apply 里 get() 一次（那样拿到 undefined，静默失败）。
+  //
+  // 读取成本必须和「打开面板」这件事相称。原来这里每次都要：
+  // hydrate 全部 active 条目、把 6.7MB 档案解密 3 遍、再全链重算一遍 —— 一次 100ms+。
+  // 现在换成 O(1) 或增量，理由分别是：
+  //   · 总数/分类   → SQL 聚合，不把正文搬进内存（ledger.stats）
+  //   · 档案规模   → 读 meta 锚点里的计数（chronicle.stats），不解密
+  //   · 最近消息   → 只解密尾部若干条，并按文件大小缓存（chronicle.tail）
+  //   · 链状态     → 只算上次验过之后的增量（chronicle.verifyFast）
+
+  // 「最近消息」缓存：键是文件大小 —— 没新写入就直接复用，不必再读尾部
+  let recentCache = { epoch: null, size: -1, items: [] };
+
+  const recentMessages = (want = 30) => {
+    try {
+      const head = chronicle.head(epoch); // O(1)
+      if (recentCache.epoch === epoch && recentCache.size === head.size) return recentCache.items;
+
+      // msg 事件和 doc/claim/forget 事件混在同一条链里，所以多取一些尾部再筛
+      const pick = (recs) => recs.filter((ev) => ev?.event?.kind === 'msg' && ev.event.role !== 'tool');
+      let recs = chronicle.tail(epoch, Math.max(want * 4, 120));
+      let msgs = pick(recs);
+      // 尾部大多是事件、凑不够 30 条消息：放大窗口再取一次（读的都是尾部字节，仍很便宜）
+      if (msgs.length < want && head.seq > recs.length) {
+        recs = chronicle.tail(epoch, Math.min(head.seq, recs.length * 8));
+        msgs = pick(recs);
+      }
+      const items = msgs
+        .slice(-want)
+        .map((ev) => ({ role: ev.event.role, text: String(ev.event.text ?? '').slice(0, 240), at: ev.event.at }))
+        .reverse();
+      recentCache = { epoch, size: head.size, items };
+      return items;
+    } catch {
+      return [];
+    }
+  };
+
   const snapshotForPanel = () => {
-    const active = ledger.active();
-    const byKind = {};
-    for (const c of active) byKind[c.kind] = (byKind[c.kind] ?? 0) + 1;
+    const counts = (() => {
+      try {
+        return ledger.stats();
+      } catch {
+        return { total: 0, byKind: {} };
+      }
+    })();
+
     const rows = chronicle.epochs().map((e) => {
       if (e.destroyed) return { ok: true, events: 0 };
-      const v = chronicle.verify(e.id);
-      let n = 0;
-      try { n = chronicle.read(e.id).length; } catch { n = 0; }
-      return { ok: v.ok, events: n };
+      try {
+        return { ok: chronicle.verifyFast(e.id).ok, events: chronicle.stats(e.id).records };
+      } catch {
+        return { ok: false, events: 0 };
+      }
     });
+
     const hot = hotNow();
-    let archived = 0;
-    try {
-      for (const ev of chronicle.read(epoch)) if (ev?.event?.kind === 'msg') archived++;
-    } catch {}
+    // archived = 当前 epoch 里归档的原文条数：读锚点计数，不为了一个数字解密整个档案
+    const archived = (() => {
+      try {
+        return chronicle.stats(epoch).kinds?.msg ?? 0;
+      } catch {
+        return 0;
+      }
+    })();
+
     return {
-      total: active.length,
+      total: counts.total,
       archived,
-      byKind,
+      byKind: counts.byKind,
       epoch,
       hot: { bytes: hot.bytes, rule: hot.counts.rule, pref: hot.counts.pref, fact: hot.counts.fact },
       verify: { ok: rows.every((r) => r.ok), events: rows.reduce((n, r) => n + r.events, 0) },
-      items: active
-        .slice()
-        .sort((a, b) => (b.validFrom ?? 0) - (a.validFrom ?? 0))
-        .slice(0, 50)
-        .map((c) => ({ id: c.id.slice(0, 8), kind: c.kind, aiw: c.aiw })),
+      items: (() => {
+        try {
+          return ledger.recent(50).map((c) => ({ id: c.id.slice(0, 8), kind: c.kind, aiw: c.aiw }));
+        } catch {
+          return [];
+        }
+      })(),
       docs: (() => {
         try {
-          return ledger.docs().slice(0, 30).map((d) => ({ id: d.id, title: d.title, tags: d.tags, updatedAt: d.updated_at }));
+          return ledger.docs(30).map((d) => ({ id: d.id, title: d.title, tags: d.tags, updatedAt: d.updated_at }));
         } catch {
           return [];
         }
       })(),
-      recent: (() => {
-        try {
-          return chronicle
-            .read(epoch)
-            .filter((ev) => ev?.event?.kind === 'msg' && ev.event.role !== 'tool')
-            .slice(-30)
-            .map((ev) => ({ role: ev.event.role, text: String(ev.event.text ?? '').slice(0, 240), at: ev.event.at }))
-            .reverse();
-        } catch {
-          return [];
-        }
-      })(),
+      recent: recentMessages(30),
       config: {
         budget,
         hot: config.hot !== false,
@@ -769,7 +811,8 @@ export function apply(ctx, config = {}) {
           for await (const chunk of req) raw += chunk;
           const body = JSON.parse(raw || '{}');
           const key = String(body.key ?? '');
-          if (!SETTABLE.has(key)) return reply(400, { ok: false, error: '不可设置的键：' + key });
+          // 白名单以 SETTING_SPECS 为唯一来源：加一个设置项只改那张表
+          if (!SETTING_SPECS[key]) return reply(400, { ok: false, error: '不可设置的键：' + key });
 
           const editor = typeof ctx.get === 'function' ? ctx.get('configEditor') : undefined;
           if (!editor?.edit || !editor?.entries) return reply(503, { ok: false, error: '本宿主没有 configEditor' });
@@ -782,14 +825,41 @@ export function apply(ctx, config = {}) {
           if (!entry) return reply(404, { ok: false, error: '找不到 loom-memory 这一行配置' });
 
           const value = body.value;
-          // 库路径只接受空串或绝对路径：相对路径会随 cwd 漂移，换一个 cwd 就换一个库
-          if (key === 'dbPath') {
-            const v = String(value ?? '').trim();
-            const absolute = v === '' || /^[A-Za-z]:[\\/]/.test(v) || v.startsWith('/');
-            if (!absolute) return reply(400, { ok: false, error: 'dbPath 必须是绝对路径（或留空用默认）' });
+          // 校验放在写之前，并且校验的是「当前配置 + 本次改动」后的整份配置：
+          // 一项不合规就整次拒绝，磁盘上那份能用的配置原样保留。
+          const pre = normalizeSetting(key, value);
+          if (!pre.ok) return reply(400, { ok: false, error: pre.error });
+
+          let applied = null;
+          try {
+            await editor.edit(entry, (current) => {
+              const check = validateChange(current, key, pre.value);
+              // 在 updater 里抛，等于「还没落盘就中止」——不会写出半份配置
+              if (!check.ok) throw Object.assign(new Error(check.error), { invalidSetting: true });
+              applied = check;
+              // 整份写回：顺手把配置里历史遗留的坏值剔掉，回退到默认
+              return check.merged;
+            });
+          } catch (e) {
+            if (e?.invalidSetting) return reply(400, { ok: false, error: String(e.message) });
+            throw e;
           }
-          await editor.edit(entry, (current) => ({ ...current, [key]: value }));
-          return reply(200, { ok: true, key, value, note: '已保存；部分设置需要重启或刷新页面生效' });
+
+          const dropped = applied?.dropped ?? [];
+          if (dropped.length) {
+            hookLog(
+              new Error(`config 里这些键不合规，已回退默认：${dropped.map((d) => d.key).join(', ')}`),
+              'config pruned',
+            );
+          }
+          return reply(200, {
+            ok: true,
+            key,
+            value: applied?.value ?? pre.value,
+            note: dropped.length
+              ? `已保存；顺手修正了 ${dropped.length} 个不合规的旧值（${dropped.map((d) => d.key).join(', ')}）`
+              : '已保存；部分设置需要重启或刷新页面生效',
+          });
         } catch (e) {
           return reply(500, { ok: false, error: String(e?.message ?? e) });
         }

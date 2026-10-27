@@ -190,6 +190,36 @@ export class SqliteLedger {
     return rows.map((r) => this.#map(r));
   }
 
+  /**
+   * 规模统计：一次 SQL 聚合拿到「总数 + 各类多少」。
+   *
+   * 面板原来拿 active() 再自己数，而 active() 是 SELECT * 全量 hydrate ——
+   * 为了显示一行数字把所有正文搬进内存，条目一多就是纯浪费，而且是每次开面板都浪费。
+   */
+  stats() {
+    const rows = this.db
+      .prepare('SELECT kind, COUNT(*) AS n FROM claim WHERE valid_to IS NULL GROUP BY kind')
+      .all();
+    const byKind = {};
+    let total = 0;
+    for (const r of rows) {
+      byKind[r.kind] = r.n;
+      total += r.n;
+    }
+    return { total, byKind };
+  }
+
+  /** 最近变更的 N 条，只查面板要显示的字段（配 stats() 取代 active() 全量） */
+  recent(limit = 50) {
+    return this.db
+      .prepare(
+        `SELECT id, kind, aiw, valid_from FROM claim
+         WHERE valid_to IS NULL ORDER BY valid_from DESC LIMIT ?`
+      )
+      .all(limit)
+      .map((r) => ({ id: r.id, kind: r.kind, aiw: r.aiw, validFrom: r.valid_from }));
+  }
+
   /** 冲突不覆盖：旧条目失效、指向新条目、理由进 supersede_log */
   supersede(oldId, newId, reason) {
     this.db
@@ -394,8 +424,11 @@ export class SqliteLedger {
     return this.db.prepare('SELECT * FROM doc').all();
   }
 
-  docs() {
-    return this.db.prepare('SELECT id,title,tags,updated_at FROM doc WHERE cold = 0 ORDER BY updated_at DESC').all();
+  docs(limit = 0) {
+    const sql = 'SELECT id,title,tags,updated_at FROM doc WHERE cold = 0 ORDER BY updated_at DESC';
+    return limit > 0
+      ? this.db.prepare(`${sql} LIMIT ?`).all(limit)
+      : this.db.prepare(sql).all();
   }
 
   #hash(s) {
