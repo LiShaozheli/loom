@@ -177,6 +177,12 @@ export function pruneInvalid(config) {
  * 校验「当前配置 + 本次改动」后的整份配置。
  * 返回 ok 时 patch 是规范化后的单个键值，merged 是写回去的完整对象。
  */
+/**
+ * @param {any} current
+ * @param {string} key
+ * @param {any} value
+ * @returns {any}
+ */
 export function validateChange(current, key, value) {
   const one = normalizeSetting(key, value);
   if (!one.ok) return { ok: false, error: one.error };
@@ -184,3 +190,23 @@ export function validateChange(current, key, value) {
   const merged = { ...config, [key]: one.value };
   return { ok: true, key, value: one.value, merged, dropped };
 }
+
+/**
+ * 插件的全部可配置项。面板能改的就是 SETTING_SPECS 里那些，这里给它们标上类型，
+ * 免得每个用到 config 的地方各写一份（写漏一个属性就是一条看不见的 any）。
+ * @typedef {object} LoomConfig
+ * @property {string} [dbPath]
+ * @property {number} [budget]
+ * @property {'legend'|'plain'|'xml'} [render]
+ * @property {number} [epochDays]
+ * @property {number} [hotBytes]
+ * @property {boolean} [hot]
+ * @property {boolean} [hotAppendOnly]
+ * @property {number} [hotOrder]
+ * @property {boolean} [protocol]
+ * @property {boolean} [autoCapture]
+ * @property {'normal'|'strict'} [autoCaptureLevel]
+ * @property {'global'|'workspace'} [scope]
+ * @property {'shared'|'session'} [memoryScope]
+ * @property {string[]} [isolatedSessions]
+ */

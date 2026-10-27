@@ -90,7 +90,7 @@ export function pickDurable(text, { level = 'normal' } = {}) {
   // 即便命中强线索，整句是个问句也不记——那是在问，不是在交代
   if (QUESTION.test(raw)) return { capture: false, kind: 'fact', reason: 'question', text: raw };
 
-  const hits = KIND_HINT.filter(([, re]) => re.test(raw)).map(([k]) => k);
+  const hits = KIND_HINT.filter(([, re]) => /** @type {RegExp} */ (re).test(raw)).map(([k]) => k);
   return {
     capture: true,
     kind: hits[0] ?? 'fact',

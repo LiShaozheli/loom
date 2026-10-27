@@ -43,7 +43,11 @@ export function appendRotating(file, text, opts = {}) {
   return { bytes: size + Buffer.byteLength(line), rotated };
 }
 
-/** 把 `file` 挤成 `.1`，原来的 `.1` 变成 `.2`……最老的（第 keep 代）丢掉。 */
+/**
+ * 把 `file` 挤成 `.1`，原来的 `.1` 变成 `.2`……最老的（第 keep 代）丢掉。
+ * @param {string} file
+ * @param {number} [keep]
+ */
 export function rotate(file, keep = LOG_LIMITS.keep) {
   for (let i = keep; i >= 1; i--) {
     const from = i === 1 ? file : `${file}.${i - 1}`;

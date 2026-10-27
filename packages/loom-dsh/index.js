@@ -198,7 +198,7 @@ const PROTOCOL = [
   '- 不确定有没有记过 → 先 memory_outline 看目录。',
 ].join('\n');
 
-/** @param {any} ctx @param {{dbPath?:string, budget?:number, render?:'legend'|'plain'|'xml', epochDays?:number, hotBytes?:number, hotAppendOnly?:boolean, hotOrder?:number, hot?:boolean}} config */
+/** @param {any} ctx @param {import('./vendor/settings.js').LoomConfig} config */
 export function apply(ctx, config = {}) {
   const budget = Number(config.budget ?? 300);
   const policy = config.render ?? 'legend';
@@ -699,7 +699,9 @@ export function apply(ctx, config = {}) {
       verify: { ok: rows.every((r) => r.ok), events: rows.reduce((n, r) => n + r.events, 0) },
       items: (() => {
         try {
-          return ledger.recent(50).map((c) => ({ id: c.id.slice(0, 8), kind: c.kind, aiw: c.aiw }));
+          return ledger
+            .recent(50)
+            .map((c) => ({ id: String(c.id).slice(0, 8), kind: c.kind, aiw: c.aiw }));
         } catch {
           return [];
         }
@@ -1587,7 +1589,11 @@ export function apply(ctx, config = {}) {
     async execute(args, _exec = {}) {
       const hits = ledger.searchDocs(args.query, { limit: Number(args.limit ?? 5) });
       return {
-        hits: hits.map((h) => ({ id: h.id, title: h.title, excerpt: h.body.slice(0, 160) })),
+        hits: hits.map((h) => ({
+          id: h.id,
+          title: h.title,
+          excerpt: String(h.body).slice(0, 160),
+        })),
         total: hits.length,
       };
     },

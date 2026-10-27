@@ -81,7 +81,7 @@ export class Chronicle {
     this.metaPath = path.join(dir, 'meta.json');
     this.durable = opts.durable !== false;
     this.lockTimeoutMs = opts.lockTimeoutMs ?? LOCK_TIMEOUT_MS;
-    /** @type {Map<string, {size:number, seq:number, hash:string}>} 进程内 head 缓存 */
+    /** @type {Map<string, {size:number, seq:number, hash:string, kinds?:Record<string,number>}>} 进程内 head 缓存 */
     this.heads = new Map();
     this.meta = this.#readMeta();
     this.metaStat = this.#statMeta();
@@ -289,6 +289,9 @@ export class Chronicle {
   }
 
   /** 列出所有时间片（含墓碑） */
+  /**
+   * @returns {Array<{id:string, createdAt:number, destroyed:boolean, reason?:string|null}>}
+   */
   epochs() {
     this.#refreshMeta();
     return Object.entries(this.meta.epochs)

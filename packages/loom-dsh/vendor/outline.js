@@ -21,7 +21,7 @@ const KIND_LABEL = {
 /**
  * @param {{id:string, kind:string, title:string, aiw:string}[]} claims
  * @param {{budget?:number, counter?:import('./contracts.js').TokenCounter, maxNodes?:number}} [opts]
- * @returns {{nodes:{id:string,title:string,kind:string,claims:number,tokens:{self:number,subtree:number}}[], totalClaims:number, usedTokens:number}}
+ * @returns {{nodes:{id:string,title:string,kind:string,claims:number,tokens:{self:number,subtree:number}}[], totalClaims:number, usedTokens:number, budget?:number, counter?:string}}
  */
 export function buildOutline(claims, opts = {}) {
   const { budget = 120, counter = chars4Counter, maxNodes = 8 } = opts;

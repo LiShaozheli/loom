@@ -28,8 +28,8 @@ export function detectIntent(text) {
     return { capture: false, kind: 'fact', due: false, text: raw, reason: 'no-cue' };
   }
 
-  const hits = KIND_HINT.filter(([, re]) => re.test(raw)).map(([k]) => k);
-  const kind = hits[0] ?? 'fact';
+  const hits = KIND_HINT.filter(([, re]) => /** @type {RegExp} */ (re).test(raw)).map(([k]) => k);
+  const kind = String(hits[0] ?? 'fact');
 
   // 「以后再说」「回头再定」这类是待办，不是事实
   const due = /以后再说|回头再|改天|下次再/.test(raw);

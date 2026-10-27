@@ -31,6 +31,11 @@ export function claimId(text) {
  *   minRecall?: number,
  *   confidence?: 'high'|'medium'|'low',
  *   source?: { eventId?: string },
+ *   sessionId?: string|null,
+ *   tier?: string,
+ *   taint?: string|null,
+ *   validFrom?: number,
+ *   validUntil?: number|null,
  * }} input
  * @returns {{ ok: boolean, claim?: any, gate: import('./contracts.js').GateResult, stripped: string }}
  */

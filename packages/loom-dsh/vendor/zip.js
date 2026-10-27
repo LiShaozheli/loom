@@ -114,6 +114,7 @@ export function makeZip(entries) {
  * 不设限的话一个 42KB 的 deflate 炸弹能解出几个 GB，直接把宿主撑爆。
  * 记忆库的正常体量远小于这些数字：单条记录几 KB，整包几十 MB 已经很大了。
  */
+/** @type {Readonly<{maxEntries:number, maxEntryBytes:number, maxTotalBytes:number}>} */
 export const ZIP_LIMITS = Object.freeze({
   maxEntries: 512,
   maxEntryBytes: 8 * 1024 * 1024,

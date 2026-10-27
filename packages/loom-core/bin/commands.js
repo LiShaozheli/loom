@@ -239,7 +239,7 @@ export function gateFile(file) {
   const probe = new SqliteLedger(':memory:');
   let rej = 0;
   for (const [i, l] of lines.entries()) {
-    const r = ingest({ line: l, epochId: 'ep', ledger: probe });
+    const r = ingest({ line: l, body: l, epochId: 'ep', ledger: probe });
     if (!r.ok) {
       rej++;
       console.log(`  ${i + 1}: ${r.gate.verdict} ${r.gate.issues.map((x) => x.code).join(',')}`);
@@ -321,7 +321,7 @@ export function importZipCmd(file) {
 /** 看某篇文档的历史版本 */
 export function docRevsCmd(keyword) {
   const db = new SqliteLedger(liveDbPath());
-  const docs = db.docs().filter((d) => !keyword || d.title.includes(keyword));
+  const docs = db.docs().filter((d) => !keyword || String(d.title).includes(keyword));
   for (const d of docs) {
     const revs = db.docRevisions(d.id);
     console.log(`${d.title}（${d.id}）· ${revs.length} 版`);

@@ -42,7 +42,7 @@ function measureReadBytes(fn) {
     bytes += Buffer.isBuffer(out) ? out.length : Buffer.byteLength(String(out));
     return out;
   };
-  fs.readSync = function (fd, buf, off, len, pos) {
+  /** @type {any} */ (fs).readSync = function (fd, buf, off, len, pos) {
     const n = rS.call(this, fd, buf, off, len, pos);
     bytes += n;
     return n;

@@ -22,7 +22,7 @@ const bytesOf = (s) => Buffer.byteLength(s, 'utf8');
 
 /**
  * @param {{kind:string, aiw:string, title?:string, validFrom?:number, cold?:boolean, taint?:string}[]} claims
- * @param {{maxBytes?:number, maxRules?:number, maxPrefs?:number, maxFacts?:number}} [opts]
+ * @param {{maxBytes?:number, maxRules?:number, maxPrefs?:number, maxFacts?:number, appendOnly?:boolean, order?:number}} [opts]
  * @returns {{text:string, counts:{rule:number,pref:number,fact:number}, bytes:number, omitted:number, tainted:number}}
  */
 export function buildHotMemory(claims, opts = {}) {

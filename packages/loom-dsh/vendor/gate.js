@@ -28,6 +28,7 @@ export function gate(draft, opts = {}) {
 
   // 3) 保真：人工 must_keep 优先，否则用规则版兜底
   let terms = Array.isArray(mustKeep) && mustKeep.length ? mustKeep.slice() : null;
+  /** @type {'model'|'rule'} */
   let from = 'model';
   if (!terms && original) {
     terms = ruleTerms(original).map((t) => t.term);
@@ -53,6 +54,7 @@ export function gate(draft, opts = {}) {
   // 判定
   const errors = issues.filter((i) => i.level === 'ERROR');
   const warns = issues.filter((i) => i.level === 'WARN');
+  /** @type {'ACCEPT'|'REJECT'|'REVISE'} */
   let verdict = 'ACCEPT';
 
   if (errors.length) verdict = 'REJECT';

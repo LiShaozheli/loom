@@ -60,7 +60,7 @@ test('settleTurn：把结果写回账本', () => {
     salience: 1,
     useCount: 0,
   });
-  led.touch = (id, patch) => {
+  /** @type {any} */ (led).touch = (id, patch) => {
     const c = led.get(id);
     if (c) Object.assign(c, patch);
   };

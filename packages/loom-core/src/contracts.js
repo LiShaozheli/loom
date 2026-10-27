@@ -49,6 +49,7 @@
  * @property {{term:string, from:'rule'|'model'}[]} mustKeep
  * @property {number|null} recall
  * @property {string[]} missing
+ * @property {string[]} [fabricated]
  */
 
 /**

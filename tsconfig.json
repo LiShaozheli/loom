@@ -18,7 +18,8 @@
     "packages/loom-core/bin/**/*.js",
     "packages/loom-core/test/**/*.js",
     "packages/loom-dsh/*.js",
-    "tools/**/*.mjs"
+    "tools/**/*.mjs",
+    "types/**/*.d.ts"
   ],
   "exclude": ["node_modules", "packages/loom-dsh/vendor/**"]
 }

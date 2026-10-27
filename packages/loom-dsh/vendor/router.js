@@ -30,7 +30,7 @@ const TIME_HINT = [
  */
 export function routeQuery(query, opts = {}) {
   const q = String(query ?? '');
-  const hits = KIND_HINTS.filter(([, re]) => re.test(q)).map(([k]) => k);
+  const hits = KIND_HINTS.filter(([, re]) => /** @type {RegExp} */ (re).test(q)).map(([k]) => k);
   const kinds = hits.length ? [...new Set(hits)] : ['fact'];
 
   const entities = identifiers(q);
@@ -38,8 +38,8 @@ export function routeQuery(query, opts = {}) {
   let since;
   const now = opts.now ?? Date.now();
   for (const [re, span] of TIME_HINT) {
-    if (re.test(q)) {
-      since = now - span;
+    if (/** @type {RegExp} */ (re).test(q)) {
+      since = now - Number(span);
       break;
     }
   }

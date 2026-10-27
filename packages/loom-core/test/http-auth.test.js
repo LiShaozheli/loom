@@ -110,7 +110,7 @@ test('沙箱 iframe（Origin: null）也挡', async () => {
 
 test('令牌对了就放行（面板就是这么访问的）', async () => {
   const { routes } = boot();
-  const token = extractToken(routes);
+  const token = extractToken();
   const ok = await call(routes.get('/loom/state'), {
     headers: { origin: 'https://evil.example', 'x-loom-token': token },
   });
@@ -120,7 +120,7 @@ test('令牌对了就放行（面板就是这么访问的）', async () => {
 
 test('令牌也能走查询参数（window.open 下载 zip 用）', async () => {
   const { routes } = boot();
-  const token = extractToken(routes);
+  const token = extractToken();
   const r = await call(routes.get('/loom/export.zip'), {
     url: '/loom/export.zip?t=' + token,
     headers: { origin: 'dsh-app://loom' },

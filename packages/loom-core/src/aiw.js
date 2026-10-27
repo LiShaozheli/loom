@@ -162,7 +162,7 @@ export function ruleTerms(text, { max = 10 } = {}) {
   const found = [];
   const seen = new Set();
   for (const [category, re] of TERM_RULES) {
-    for (const m of body.matchAll(re)) {
+    for (const m of body.matchAll(/** @type {RegExp} */ (re))) {
       const term = m[0].replace(/[./:_-]+$/, '').trim();
       if (!term || term.length < 2) continue;
       if (category === 'id' && !/[A-Z]/.test(term) && term.length < 2) continue;

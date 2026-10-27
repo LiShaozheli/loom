@@ -13,7 +13,12 @@ import crypto from 'node:crypto';
 
 export const sha256 = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
 
-/** 给文件建一个可核对的引用 */
+/**
+ * 给文件建一个可核对的引用
+ * @param {string} target
+ * @param {string} [digest]
+ * @returns {Ref}
+ */
 export function fileRef(target, digest) {
   const d = digest ?? (fs.existsSync(target) ? sha256(fs.readFileSync(target)) : undefined);
   return { kind: 'file', target, digest: d, status: d ? 'fresh' : 'unknown' };

@@ -220,6 +220,7 @@ export class SqliteLedger {
     return claim;
   }
 
+  /** @param {string} id @returns {any} */
   get(id) {
     const row = this.db.prepare('SELECT * FROM claim WHERE id = ?').get(id);
     return row ? this.#map(row) : null;
@@ -280,7 +281,7 @@ export class SqliteLedger {
     let total = 0;
     for (const r of rows) {
       byKind[r.kind] = r.n;
-      total += r.n;
+      total += Number(r.n);
     }
     return { total, byKind };
   }
@@ -310,7 +311,12 @@ export class SqliteLedger {
     return this.get(oldId);
   }
 
-  /** bigram 关键词检索：多词之间是 OR（任一命中都进候选），由 bm25 排序 */
+  /**
+   * bigram 关键词检索：多词之间是 OR（任一命中都进候选），由 bm25 排序
+   * @param {string} query
+   * @param {{limit?:number, kind?:string, session?:string|null}} [opts]
+   * @returns {any[]}
+   */
   search(query, { limit = 10, kind, session } = {}) {
     const terms = contentBigrams(query).split(' ').filter(Boolean);
     if (!terms.length) return [];
@@ -392,6 +398,12 @@ export class SqliteLedger {
 
   // ---------------- 关系边 ----------------
 
+  /**
+   * @param {string} fromId
+   * @param {string} toId
+   * @param {{type?:string, weight?:number, now?:number}} [opts]
+   * @returns {any}
+   */
   link(fromId, toId, { type = 'semantic', weight = 1, now = Date.now() } = {}) {
     if (!fromId || !toId || fromId === toId) return null;
     this.db
@@ -415,7 +427,12 @@ export class SqliteLedger {
       }));
   }
 
-  /** 从一条记忆出发做 BFS，返回邻居与距离 */
+  /**
+   * 从一条记忆出发做 BFS，返回邻居与距离
+   * @param {string} id
+   * @param {{depth?:number, type?:string}} [opts]
+   * @returns {any[]}
+   */
   related(id, { depth = 1, type } = {}) {
     const seen = new Set([id]);
     const out = [];
@@ -425,10 +442,11 @@ export class SqliteLedger {
       for (const cur of frontier) {
         for (const e of this.edgesOf(cur)) {
           if (type && e.type !== type) continue;
-          if (seen.has(e.other)) continue;
-          seen.add(e.other);
-          next.push(e.other);
-          const c = this.get(e.other);
+          const other = String(e.other);
+          if (seen.has(other)) continue;
+          seen.add(other);
+          next.push(other);
+          const c = this.get(other);
           out.push({
             id: e.other,
             distance: d,
@@ -446,7 +464,11 @@ export class SqliteLedger {
 
   // ---------------- 项目文档 ----------------
 
-  /** 写一篇文档；同标题视为同一篇（更新而不是堆叠） */
+  /**
+   * 写一篇文档；同标题视为同一篇（更新而不是堆叠）
+   * @param {{id?:string, title:string, body:string, tags?:string, now?:number}} doc
+   * @returns {any}
+   */
   putDoc({ id, title, body, tags = '', now = Date.now() }) {
     const docId = id ?? `doc-${this.#hash(title)}`;
     const bg = bigrams(`${title} ${body}`);
@@ -472,12 +494,13 @@ export class SqliteLedger {
     if (!last || last.body !== body) {
       this.db
         .prepare('INSERT INTO doc_rev (doc_id, rev, title, body, at) VALUES (?,?,?,?,?)')
-        .run(docId, (last?.rev ?? 0) + 1, title, body, now);
+        .run(docId, Number(last?.rev ?? 0) + 1, title, body, now);
     }
 
     return this.getDoc(docId);
   }
 
+  /** @returns {any} */
   getDoc(id) {
     return this.db.prepare('SELECT * FROM doc WHERE id = ?').get(id) ?? null;
   }
@@ -520,6 +543,7 @@ export class SqliteLedger {
   }
 
   /** 一篇文档的历史版本（新的在前） */
+  /** @returns {any[]} */
   docRevisions(id) {
     return this.db
       .prepare(
@@ -555,6 +579,7 @@ export class SqliteLedger {
     return this.db.prepare('SELECT * FROM doc').all();
   }
 
+  /** @param {number} [limit] @returns {any[]} */
   docs(limit = 0) {
     const sql = 'SELECT id,title,tags,updated_at FROM doc WHERE cold = 0 ORDER BY updated_at DESC';
     return limit > 0 ? this.db.prepare(`${sql} LIMIT ?`).all(limit) : this.db.prepare(sql).all();

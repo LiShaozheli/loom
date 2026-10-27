@@ -53,7 +53,7 @@ export function attributeOverlap(answer, items, { minOverlap = 0.25 } = {}) {
 
 /**
  * 结算一条 claim 的权重变化。
- * @param {{salience:number, useCount:number}} claim
+ * @param {{salience:number, useCount:number, lastUsedAt?:number|null}} claim
  * @param {{used:boolean, correct:boolean|null, now?:number}} outcome
  */
 export function nextWeight(claim, outcome) {

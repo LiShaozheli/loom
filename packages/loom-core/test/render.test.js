@@ -39,12 +39,12 @@ test('xml：结构化且转义', () => {
 
 test('空层不返回垃圾', () => {
   for (const p of Object.keys(POLICIES)) {
-    assert.equal(render({ items: [], pointers: [] }, { policy: p }), '');
+    assert.equal(render({ items: [], pointers: [] }, /** @type {any} */ ({ policy: p })), '');
   }
 });
 
 test('未知策略要报错，不静默降级', () => {
-  assert.throws(() => render(bundle, { policy: 'nope' }), /未知渲染策略/);
+  assert.throws(() => render(bundle, /** @type {any} */ ({ policy: 'nope' })), /未知渲染策略/);
 });
 
 test('render 默认用 legend', () => {
