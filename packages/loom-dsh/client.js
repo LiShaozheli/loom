@@ -205,6 +205,27 @@ outline:2px solid var(--lm-brand);outline-offset:2px}
       return /^https?:$/.test(location.protocol) ? location.origin : null;
     }
 
+    /**
+     * 面板数据的访问令牌：宿主把它注入页面（与 __LOOM_SEED__ 一起）。
+     * 没拿到也不致命——同源请求服务端会直接放行；只有 dsh-app:// 这类
+     * 跨源页面才必须靠它。
+     */
+    function loomToken() {
+      try {
+        return (typeof window !== 'undefined' && window.__LOOM_TOKEN__) || '';
+      } catch {
+        return '';
+      }
+    }
+
+    /** 所有 /loom/* 请求都走这里，统一带令牌，免得漏掉某一条 */
+    function api(url, opts = {}) {
+      const headers = { ...(opts.headers || {}) };
+      const t = loomToken();
+      if (t) headers['x-loom-token'] = t;
+      return fetch(url, { ...opts, headers });
+    }
+
     /** 当前页 URL 里往往带着会话 id；带上就能在下拉框里预选「就是这个对话」 */
     function currentSessionId(ids) {
       try {
@@ -341,7 +362,7 @@ outline:2px solid var(--lm-brand);outline-offset:2px}
           return;
         }
         setState((s) => ({ ...s, loading: true, error: null }));
-        fetch(base + '/loom/state', { credentials: 'omit' })
+        api(base + '/loom/state', { credentials: 'omit' })
           .then((r) => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
           .then((data) => setState({ loading: false, data, error: null }))
           .catch((e) => setState({ loading: false, data: seed, error: e.message }));
@@ -350,7 +371,7 @@ outline:2px solid var(--lm-brand);outline-offset:2px}
       const loadSessions = React.useCallback(() => {
         if (!base) return;
         setSessErr(null);
-        fetch(base + '/loom/sessions', { credentials: 'omit' })
+        api(base + '/loom/sessions', { credentials: 'omit' })
           .then((r) => r.json())
           .then((r) => {
             if (!r.ok) throw new Error(r.error || 'HTTP');
@@ -367,7 +388,7 @@ outline:2px solid var(--lm-brand);outline-offset:2px}
       React.useEffect(() => { if (tab === '设置') loadSessions(); }, [tab, loadSessions]);
 
       const post = (pathname, payload) =>
-        fetch(base + pathname, {
+        api(base + pathname, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           credentials: 'omit',
@@ -400,7 +421,7 @@ outline:2px solid var(--lm-brand);outline-offset:2px}
           && !window.confirm('把「' + file.name + '」合并进当前库？相同 id 的记忆会被覆盖。')) return;
         file.arrayBuffer()
           .then((buf) =>
-            fetch(base + '/loom/import', {
+            api(base + '/loom/import', {
               method: 'POST',
               headers: { 'content-type': 'application/octet-stream' },
               credentials: 'omit',
@@ -420,7 +441,7 @@ outline:2px solid var(--lm-brand);outline-offset:2px}
         if (docOpen === id) { setDocOpen(null); setDocView(null); return; }
         setDocOpen(id);
         setDocView({ loading: true });
-        fetch(base + '/loom/doc?id=' + encodeURIComponent(id), { credentials: 'omit' })
+        api(base + '/loom/doc?id=' + encodeURIComponent(id), { credentials: 'omit' })
           .then((r) => r.json())
           .then((r) => setDocView(r.ok ? r : { error: r.error }))
           .catch((e) => setDocView({ error: e.message }));
@@ -430,7 +451,7 @@ outline:2px solid var(--lm-brand);outline-offset:2px}
         if (!base) return;
         const text = String(word ?? '').trim();
         if (!text) { setHits(null); return; }
-        fetch(base + '/loom/archive?roles=user,assistant&q=' + encodeURIComponent(text), { credentials: 'omit' })
+        api(base + '/loom/archive?roles=user,assistant&q=' + encodeURIComponent(text), { credentials: 'omit' })
           .then((r) => r.json())
           .then((r) => setHits(r.hits || []))
           .catch(() => setHits([]));
@@ -455,7 +476,7 @@ outline:2px solid var(--lm-brand);outline-offset:2px}
       const save = (key, value) => {
         if (!base) { setSaved('没有连上宿主，设置改不了'); return; }
         markSaved(key, 'saving');
-        fetch(base + '/loom/config', {
+        api(base + '/loom/config', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           credentials: 'omit',
@@ -655,7 +676,7 @@ outline:2px solid var(--lm-brand);outline-offset:2px}
                     type: 'button', className: 'lm-btn mini',
                     onClick: () => {
                       if (!base) return;
-                      fetch(base + '/loom/doc?id=' + encodeURIComponent(doc.id), { credentials: 'omit' })
+                      api(base + '/loom/doc?id=' + encodeURIComponent(doc.id), { credentials: 'omit' })
                         .then((r) => r.json())
                         .then((r) => setDocForm(r.ok ? { id: doc.id, title: r.doc.title, body: r.doc.body, tags: r.doc.tags || '' } : { title: doc.title, body: '', tags: '' }));
                     },
@@ -894,7 +915,12 @@ outline:2px solid var(--lm-brand);outline-offset:2px}
               },
                 h('button', {
                   type: 'button', className: 'lm-btn',
-                  onClick: () => { if (base) window.open(base + '/loom/export.zip', '_blank'); },
+                  onClick: () => {
+                    if (!base) return;
+                    // window.open 带不了自定义头，所以走查询参数；服务端两种都认
+                    const t = loomToken();
+                    window.open(base + '/loom/export.zip' + (t ? '?t=' + encodeURIComponent(t) : ''), '_blank');
+                  },
                 }, '下载 ZIP')),
               h(Row, {
                 label: '导入', wide: true,
@@ -953,7 +979,7 @@ outline:2px solid var(--lm-brand);outline-offset:2px}
         const base = hostOrigin();
         if (!base) return;
         let alive = true;
-        fetch(base + '/loom/state', { credentials: 'omit' })
+        api(base + '/loom/state', { credentials: 'omit' })
           .then((r) => (r.ok ? r.json() : null))
           .then((d) => {
             tailCache = { at: Date.now(), data: d };

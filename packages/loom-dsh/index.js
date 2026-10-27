@@ -9,6 +9,7 @@
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 
 import { ingest } from './vendor/ingest.js';
 import { parseTail, makeTitle } from './vendor/aiw.js';
@@ -43,12 +44,22 @@ const SHARED =
     // 重建时漏挂。所以不记账：每次照常注册，把 duplicate 当成"已挂上"。
     seedInstalled: false, // 首屏种子只装一次
     log: null, // 当前实例的 hookLog，给全局的兜底用
+    // 面板数据的访问令牌。/loom/* 是本地 HTTP 面，任何网页都 fetch 得到，
+    // 只靠 CORS 挡不住（allow-origin: * 是我们自己发的）。令牌注入页面里，
+    // 跨源页面读不到宿主 HTML，也就拿不到它。
+    // 放进程级而不是实例级：保存设置会触发插件重载，实例级令牌一变，
+    // 已经打开的页面立刻全部 403 —— 等于用一次设置把自己锁在门外。
+    token: crypto.randomBytes(16).toString('hex'),
   });
 
 // 热重载会复用同一个 SHARED 对象，上一版写的字段可能对不上，补齐再用
 SHARED.ledgers ??= new Map();
 SHARED.routes ??= new Map();
+SHARED.live ??= null;
 if (typeof SHARED.seedInstalled !== 'boolean') SHARED.seedInstalled = false;
+if (typeof SHARED.token !== 'string' || SHARED.token.length < 16) {
+  SHARED.token = crypto.randomBytes(16).toString('hex');
+}
 
 // ---- 打开的库：按路径去重 + 引用计数 ----
 // 宿主重载插件时新旧两个实例会短暂并存，旧实例的 prompt section 可能还活着。
@@ -631,7 +642,8 @@ export function apply(ctx, config = {}) {
     const CORS_PREFLIGHT = {
       'access-control-allow-origin': '*',
       'access-control-allow-methods': 'POST, OPTIONS',
-      'access-control-allow-headers': 'content-type',
+      // 少一个自定义头，浏览器就直接拒发真正的请求（预检失败 = Failed to fetch）
+      'access-control-allow-headers': 'content-type, x-loom-token',
       'access-control-max-age': '600',
     };
     // Cordis 的服务代理对未 inject 的属性访问会抛错，所以每条路都单独兜
@@ -646,6 +658,46 @@ export function apply(ctx, config = {}) {
     // ctx.inject 给的子上下文若取不到服务，退回插件自身的 ctx 再试一次
     const web = resolveWeb(scope) ?? resolveWeb(ctx);
     if (!web?.register) return;
+
+    // 宿主自己的 origin：同源请求（面板、地址栏、curl）直接放行，不需要令牌
+    const ownOrigin = (() => {
+      try {
+        return typeof web.getOrigin === 'function' ? String(web.getOrigin() ?? '') : '';
+      } catch {
+        return '';
+      }
+    })();
+
+    /**
+     * 访问门禁。所有路由共用这一个判断（在 dispatch 里），不各写一遍。
+     *
+     * 为什么必须有：这些路由能读全量记忆、能改配置、能删、能导入 ——
+     * 而它们是本机 HTTP 端口上的，任何网页都能 fetch 到。
+     * CORS 只决定「能不能读响应」，挡不住「请求已经执行」：
+     *   POST /loom/forget 是简单请求之外的 JSON POST，会先预检，
+     *   但预检我们自己发了 allow-origin: * —— 等于自己把门开开。
+     *
+     * 放行条件（满足其一）：
+     *   1. 带对令牌（面板从页面里拿；跨源页面读不到宿主 HTML，拿不到）
+     *   2. 没有 Origin 头（curl、服务端调用；跨源 fetch 一定带 Origin）
+     *   3. Origin 就是宿主自己（同源页面）
+     * OPTIONS 直接放行：预检不带自定义头，真正的请求还会再过一次这里。
+     */
+    const denied = (req) => {
+      if (req?.method === 'OPTIONS') return null;
+      let url;
+      try {
+        url = new URL(req?.url ?? '/', 'http://localhost');
+      } catch {
+        return 'bad-url';
+      }
+      const token = req?.headers?.['x-loom-token'] || url.searchParams.get('t');
+      if (token && token === SHARED.token) return null;
+      const origin = req?.headers?.origin;
+      if (!origin) return null;
+      if (ownOrigin && origin === ownOrigin) return null;
+      return 'cross-origin';
+    };
 
     // 逐条注册：一条失败不该带走其余，而且失败必须留痕
     // （之前整块 try 包住 8 条 register，任何一条抛错其余全部静默失踪）
@@ -670,6 +722,11 @@ export function apply(ctx, config = {}) {
           } catch {}
         };
         if (!SHARED.live) return bail(503, 'loom 插件已停用或正在重载，稍后再试');
+        const blocked = denied(req);
+        if (blocked) {
+          hookLog(new Error(`denied(${blocked}) ${req?.method ?? '?'} ${String(req?.url ?? '')}`), 'route denied');
+          return bail(403, '拒绝访问：跨源请求没有携带 x-loom-token');
+        }
         if (typeof handler !== 'function') return bail(503, 'loom 路由还没有就绪');
         try {
           return await handler(req, res);
@@ -1122,7 +1179,7 @@ export function apply(ctx, config = {}) {
           const snap = SHARED.live?.snapshot?.();
           if (snap) json = JSON.stringify(snap).replace(/</g, '\\u003c');
         } catch {}
-        const tag = `<script>window.__LOOM_SEED__=${json};</script></head>`;
+        const tag = `<script>window.__LOOM_SEED__=${json};window.__LOOM_TOKEN__=${JSON.stringify(SHARED.token)};</script></head>`;
         return html.includes('</head>') ? html.replace('</head>', tag) : html + tag;
       });
     }

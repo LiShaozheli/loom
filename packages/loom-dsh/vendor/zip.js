@@ -108,12 +108,26 @@ export function makeZip(entries) {
 }
 
 /**
+ * 解压上限。导入包是从外部（可能是网页、可能是别人发来的 zip）进来的，
+ * 不设限的话一个 42KB 的 deflate 炸弹能解出几个 GB，直接把宿主撑爆。
+ * 记忆库的正常体量远小于这些数字：单条记录几 KB，整包几十 MB 已经很大了。
+ */
+export const ZIP_LIMITS = Object.freeze({
+  maxEntries: 512,
+  maxEntryBytes: 8 * 1024 * 1024,
+  maxTotalBytes: 64 * 1024 * 1024,
+});
+
+/**
  * 读 ZIP：支持 store 与 deflate。
  * @param {Buffer} buf
+ * @param {Partial<typeof ZIP_LIMITS>} [limits]
  * @returns {Map<string, Buffer>}
  */
-export function readZip(buf) {
+export function readZip(buf, limits = {}) {
+  const cap = { ...ZIP_LIMITS, ...limits };
   const out = new Map();
+  let total = 0;
 
   // 从尾部找 EOCD
   let eocd = -1;
@@ -128,7 +142,13 @@ export function readZip(buf) {
   const count = buf.readUInt16LE(eocd + 10);
   let p = buf.readUInt32LE(eocd + 16);
 
+  // 条目数先卡住：一个 512 条的包已经远超正常记忆备份
+  if (count > cap.maxEntries) {
+    throw new Error(`ZIP 条目太多（${count} > ${cap.maxEntries}），拒绝读取`);
+  }
+
   for (let i = 0; i < count; i++) {
+    if (p + 46 > buf.length) throw new Error('目录项越界');
     if (buf.readUInt32LE(p) !== 0x02014b50) throw new Error('目录项损坏');
     const method = buf.readUInt16LE(p + 10);
     const compSize = buf.readUInt32LE(p + 20);
@@ -138,13 +158,40 @@ export function readZip(buf) {
     const localOffset = buf.readUInt32LE(p + 42);
     const name = buf.slice(p + 46, p + 46 + nameLen).toString('utf8');
 
+    if (localOffset + 30 > buf.length) throw new Error('本地头越界：' + name);
     if (buf.readUInt32LE(localOffset) !== 0x04034b50) throw new Error('本地头损坏：' + name);
     const lNameLen = buf.readUInt16LE(localOffset + 26);
     const lExtraLen = buf.readUInt16LE(localOffset + 28);
     const dataStart = localOffset + 30 + lNameLen + lExtraLen;
+    if (dataStart + compSize > buf.length) throw new Error('数据段越界：' + name);
     const raw = buf.slice(dataStart, dataStart + compSize);
 
-    out.set(name, method === 8 ? zlib.inflateRawSync(raw) : Buffer.from(raw));
+    let data;
+    if (method === 8) {
+      // maxOutputLength 是关键：没有它，炸弹包在 inflate 阶段就把内存吃干
+      try {
+        data = zlib.inflateRawSync(raw, { maxOutputLength: cap.maxEntryBytes });
+      } catch (e) {
+        if (e?.code === 'ERR_BUFFER_TOO_LARGE' || /maxOutputLength|buffer/i.test(String(e?.message))) {
+          throw new Error(`ZIP 条目解压后超过 ${cap.maxEntryBytes} 字节，拒绝读取：${name}`);
+        }
+        throw new Error(`ZIP 条目解压失败：${name}（${e?.message ?? e}）`);
+      }
+    } else if (method === 0) {
+      if (raw.length > cap.maxEntryBytes) {
+        throw new Error(`ZIP 条目超过 ${cap.maxEntryBytes} 字节，拒绝读取：${name}`);
+      }
+      data = Buffer.from(raw);
+    } else {
+      throw new Error(`不支持的压缩方式 ${method}：${name}`);
+    }
+
+    total += data.length;
+    if (total > cap.maxTotalBytes) {
+      throw new Error(`ZIP 解压总量超过 ${cap.maxTotalBytes} 字节，拒绝读取`);
+    }
+
+    out.set(name, data);
     p += 46 + nameLen + extraLen + commentLen;
   }
 

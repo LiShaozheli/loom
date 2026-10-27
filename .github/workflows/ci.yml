@@ -31,6 +31,10 @@ jobs:
           npm --version
 
       # 零依赖：不需要 npm ci
+      # 先拦「改在不会执行的那份上」：vendor 是 src 的副本，漂移了后面全白搭
+      - name: 核心代码副本一致性
+        run: npm run vendor:check
+
       - name: 单元测试
         run: npm test
 

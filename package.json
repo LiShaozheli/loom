@@ -28,7 +28,9 @@
     "dedupe": "node tools/dedupe.mjs",
     "retrieval": "node tools/retrieval-eval.mjs",
     "reindex": "node tools/reindex.mjs",
-    "check": "npm test && npm run verify",
+    "vendor:sync": "node tools/vendor-sync.mjs",
+    "vendor:check": "node tools/vendor-sync.mjs --check",
+    "check": "npm run vendor:check && npm test && npm run verify",
     "migrate": "node tools/migrate.mjs"
   }
 }
