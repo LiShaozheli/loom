@@ -7,8 +7,13 @@ const DAY = 86_400_000;
 const now = Date.parse('2026-10-26T00:00:00Z');
 
 const mk = (over = {}) => ({
-  id: 'x', kind: 'fact', title: 't', aiw: 'a', validFrom: now,
-  useCount: 0, ...over,
+  id: 'x',
+  kind: 'fact',
+  title: 't',
+  aiw: 'a',
+  validFrom: now,
+  useCount: 0,
+  ...over,
 });
 
 test('规则与偏好永不衰减', () => {
@@ -46,9 +51,19 @@ test('sweep：dry 不动库，apply 只标 cold', () => {
   const db = new SqliteLedger(':memory:');
   const put = (id, kind, validFrom, useCount = 0) =>
     db.put({
-      id, kind, body: 'b', aiw: `正文${id}`, title: `标题${id}`,
-      confidence: 'high', source: { eventId: 'e' }, epochId: 'ep', taint: 'none',
-      validFrom, salience: 1, useCount, cold: false,
+      id,
+      kind,
+      body: 'b',
+      aiw: `正文${id}`,
+      title: `标题${id}`,
+      confidence: 'high',
+      source: { eventId: 'e' },
+      epochId: 'ep',
+      taint: 'none',
+      validFrom,
+      salience: 1,
+      useCount,
+      cold: false,
     });
 
   put('keep', 'rule', now - 1000 * DAY);
@@ -69,8 +84,17 @@ test('sweep：dry 不动库，apply 只标 cold', () => {
 test('sweep 可按 kind 过滤', () => {
   const db = new SqliteLedger(':memory:');
   db.put({
-    id: 'a', kind: 'proc', body: 'b', aiw: 'x', title: 't', confidence: 'high',
-    source: { eventId: 'e' }, epochId: 'ep', taint: 'none', validFrom: now - 500 * DAY, salience: 1,
+    id: 'a',
+    kind: 'proc',
+    body: 'b',
+    aiw: 'x',
+    title: 't',
+    confidence: 'high',
+    source: { eventId: 'e' },
+    epochId: 'ep',
+    taint: 'none',
+    validFrom: now - 500 * DAY,
+    salience: 1,
   });
   const r = sweep(db, { now, kinds: ['fact'] });
   assert.equal(r.rows.length, 0);

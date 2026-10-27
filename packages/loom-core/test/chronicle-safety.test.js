@@ -63,7 +63,9 @@ test('追加是 O(1)：2MB 档案上追加一条，读盘远小于文件本身',
   const { size } = craftLog(dir, ep, 800); // ~2.2MB
   ch.heads.delete(ep); // 丢掉缓存，模拟"真实需要自愈"的路径
 
-  const { result, bytes } = measureReadBytes(() => ch.append(ep, { kind: 'msg', text: '一条新记忆' }));
+  const { result, bytes } = measureReadBytes(() =>
+    ch.append(ep, { kind: 'msg', text: '一条新记忆' })
+  );
   assert.equal(result.seq, 800, 'seq 应当接在 800 条之后');
   assert.ok(bytes < 200 * 1024, `追加读了 ${bytes} 字节，应当只读尾部 chunk（<200KB）`);
   assert.ok(size > 2 * 1024 * 1024);
@@ -117,7 +119,10 @@ test('已销毁的 epoch 不会被另一个陈旧进程复活', () => {
 
   const c = new Chronicle(dir, { durable: false });
   assert.equal(c.isDestroyed(ep), true, '销毁状态被复活的进程撤销了');
-  assert.equal(c.epochs().some((e) => e.id === ep && !e.destroyed), false);
+  assert.equal(
+    c.epochs().some((e) => e.id === ep && !e.destroyed),
+    false
+  );
   assert.throws(() => c.read(ep), /不存在或已销毁/);
   assert.throws(() => c.createEpoch(ep), /已被销毁/);
 });
@@ -170,5 +175,8 @@ test('重建实例后 head 自愈：不需要整文件扫描也能接上', () =>
   const b = new Chronicle(dir, { durable: false }); // 全新进程：head 缓存空
   assert.equal(b.append(ep, { kind: 'msg', text: '第 3 条' }).seq, 3);
   assert.equal(new Chronicle(dir, { durable: false }).verify(ep).count, 4);
-  assert.deepEqual(new Chronicle(dir, { durable: false }).read(ep).map((r) => r.seq), [0, 1, 2, 3]);
+  assert.deepEqual(
+    new Chronicle(dir, { durable: false }).read(ep).map((r) => r.seq),
+    [0, 1, 2, 3]
+  );
 });

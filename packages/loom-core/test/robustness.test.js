@@ -19,7 +19,8 @@ test('空库：不抛错、返回空、不跳过', async () => {
 
 test('异常输入：空串、超长、纯符号都不该让闸门崩', async () => {
   const db = new SqliteLedger(':memory:');
-  const w = (line) => ingest({ line, body: line, epochId: 'ep', ledger: db, source: { eventId: 'x' } });
+  const w = (line) =>
+    ingest({ line, body: line, epochId: 'ep', ledger: db, source: { eventId: 'x' } });
 
   assert.equal(w('').ok, false, '空行应被拒');
   assert.equal(w('   ').ok, false);
@@ -34,7 +35,13 @@ test('重复写入同一内容：只留一条', async () => {
   const db = new SqliteLedger(':memory:');
   const line = '预发端口 8081；上线前必跑 smoke。';
   const a = ingest({ line, body: line, epochId: 'ep', ledger: db, source: { eventId: 'x' } });
-  const b = ingest({ line: line.replace('；', '，'), body: line, epochId: 'ep', ledger: db, source: { eventId: 'y' } });
+  const b = ingest({
+    line: line.replace('；', '，'),
+    body: line,
+    epochId: 'ep',
+    ledger: db,
+    source: { eventId: 'y' },
+  });
   assert.equal(a.claim.id, b.claim.id);
   assert.equal(db.active().length, 1);
   db.close();
@@ -68,7 +75,9 @@ test('规模：5000 条下检索仍可用', () => {
   const ms = Number(process.hrtime.bigint() - t0) / 1e6;
   const p95 = ms / 50;
 
-  console.log(`  5000 条 · 50 次检索共 ${ms.toFixed(1)}ms · 平均 ${p95.toFixed(1)}ms/次 · 命中 ${hits}`);
+  console.log(
+    `  5000 条 · 50 次检索共 ${ms.toFixed(1)}ms · 平均 ${p95.toFixed(1)}ms/次 · 命中 ${hits}`
+  );
   assert.ok(hits > 0, '应该有命中');
   assert.ok(p95 < 50, `单次检索 ${p95.toFixed(1)}ms 超预算`);
   db.close();

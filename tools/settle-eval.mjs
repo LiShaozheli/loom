@@ -57,7 +57,10 @@ async function ask(item, question) {
     headers: { 'content-type': 'application/json', authorization: `Bearer ${KEY}` },
     body: JSON.stringify({
       model: 'deepseek-chat',
-      messages: [{ role: 'system', content: SYS }, { role: 'user', content: user }],
+      messages: [
+        { role: 'system', content: SYS },
+        { role: 'user', content: user },
+      ],
       temperature: 0,
       max_tokens: 100,
     }),
@@ -82,11 +85,14 @@ const citeRate = rows.filter((r) => r.cited).length / rows.length;
 const overRate = rows.filter((r) => r.overlap).length / rows.length;
 const agree = rows.filter((r) => r.cited === r.overlap).length / rows.length;
 
-console.log(`\n引用率 ${pct(citeRate)} · 词面命中率 ${pct(overRate)} · 两者一致 ${pct(agree)}（${rows.length} 题）`);
+console.log(
+  `\n引用率 ${pct(citeRate)} · 词面命中率 ${pct(overRate)} · 两者一致 ${pct(agree)}（${rows.length} 题）`
+);
 const none = rows.filter((r) => !r.cited && !r.overlap);
 if (none.length) {
   console.log(`两种归因都判定"没用"：${none.length} 条`);
-  for (const r of none.slice(0, 3)) console.log(`  ${r.id}: ${r.answer.replace(/\n/g, ' ').slice(0, 80)}`);
+  for (const r of none.slice(0, 3))
+    console.log(`  ${r.id}: ${r.answer.replace(/\n/g, ' ').slice(0, 80)}`);
 }
 
 fs.writeFileSync(
@@ -99,7 +105,10 @@ fs.writeFileSync(
     '',
     '| 记忆 | 引用 | 词面 | 回答 |',
     '| --- | --- | --- | --- |',
-    ...rows.map((r) => `| ${r.id} | ${r.cited ? '✓' : '✗'} | ${r.overlap ? '✓' : '✗'} | ${r.answer.replace(/\n/g, ' ').slice(0, 60)} |`),
+    ...rows.map(
+      (r) =>
+        `| ${r.id} | ${r.cited ? '✓' : '✗'} | ${r.overlap ? '✓' : '✗'} | ${r.answer.replace(/\n/g, ' ').slice(0, 60)} |`
+    ),
     '',
   ].join('\n'),
   'utf8'

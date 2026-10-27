@@ -75,7 +75,15 @@ export function sweep(ledger, opts = {}) {
     if (kinds && !kinds.includes(claim.kind)) continue;
     const { score, days, halfLife } = decayScore(claim, { now });
     const action = decide(score);
-    rows.push({ id: claim.id, kind: claim.kind, title: claim.title, score: Number(score.toFixed(3)), days: Math.round(days), halfLife, action });
+    rows.push({
+      id: claim.id,
+      kind: claim.kind,
+      title: claim.title,
+      score: Number(score.toFixed(3)),
+      days: Math.round(days),
+      halfLife,
+      action,
+    });
     if (apply && action !== 'keep') {
       // 只标 cold，不删除；正文与来源都还在
       ledger.touch(claim.id, { cold: true, salience: Number(score.toFixed(3)) });

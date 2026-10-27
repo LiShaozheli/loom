@@ -45,7 +45,8 @@ test('空白输入不炸', () => {
 });
 
 test('粘贴块与引用不自动记（真实踩到过）', () => {
-  const ui = 'LOOM 记忆\n没有数据\n刷新\n刷新失败：Failed to fetch重新加载页面\n还没有记忆。对助手说「记住：…」即可。';
+  const ui =
+    'LOOM 记忆\n没有数据\n刷新\n刷新失败：Failed to fetch重新加载页面\n还没有记忆。对助手说「记住：…」即可。';
   assert.equal(pickDurable(ui).capture, false);
 
   const quote = '文档里写着「记住要先备份」，你看对不对';
@@ -62,7 +63,8 @@ test('capture level：normal 连偏好陈述也记，strict 不记', () => {
 });
 
 test('运行时上下文不参与判定（真实会话里它占了大半）', () => {
-  const real = '这个项目用 pnpm\n\nCurrent runtime context. 快照……\nMNEMON RUNTIME MEMORY SNAPSHOT\n……';
+  const real =
+    '这个项目用 pnpm\n\nCurrent runtime context. 快照……\nMNEMON RUNTIME MEMORY SNAPSHOT\n……';
   const clean = stripRuntimeNoise(real);
   assert.equal(clean, '这个项目用 pnpm');
   assert.equal(pickDurable(clean).capture, true);

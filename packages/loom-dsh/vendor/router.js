@@ -24,8 +24,6 @@ const TIME_HINT = [
   [/半年/, 180 * 864e5],
 ];
 
-const STOP = /是多少|是什么|什么|怎么|为什么|如何|是不是|能不能|有没有|吗|呢|的|了|[?？]/g;
-
 /**
  * @param {string} query
  * @param {{now?:number}} [opts]
@@ -82,7 +80,8 @@ export function scoreClaim(claim, route) {
   const full = `${core} ${claim.body ?? ''}`;
   const lexCore = cosineBigram(route.query ?? '', core);
   const entHits = route.entities.length
-    ? route.entities.filter((e) => full.toLowerCase().includes(e.toLowerCase())).length / route.entities.length
+    ? route.entities.filter((e) => full.toLowerCase().includes(e.toLowerCase())).length /
+      route.entities.length
     : 0;
 
   const uni = unigramScore(route.query ?? '', core);

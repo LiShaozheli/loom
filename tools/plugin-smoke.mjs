@@ -49,7 +49,9 @@ const w2 = await call('memory_write', {
 });
 console.log('memory_write（碎片稿）→', JSON.stringify(w2));
 
-const w3 = await call('memory_write', { line: '预发端口 8081；上线前必跑 smoke。 @2026-10-26 #用户口述 高' });
+const w3 = await call('memory_write', {
+  line: '预发端口 8081；上线前必跑 smoke。 @2026-10-26 #用户口述 高',
+});
 console.log('memory_write（汉字置信）→', JSON.stringify(w3));
 
 const r = await call('memory_recall', { query: '上次 JWT 那个方案为什么回滚？' });
@@ -58,7 +60,11 @@ console.log('\nmemory_recall →', JSON.stringify(r, null, 2));
 const s = await call('memory_stats', {});
 console.log('\nmemory_stats →', JSON.stringify(s));
 
-const ok = w1.ok === true && w2.ok === false && w3.ok === true && r.items.some((i) => i.text.includes('JWT'));
+const ok =
+  w1.ok === true &&
+  w2.ok === false &&
+  w3.ok === true &&
+  r.items.some((i) => i.text.includes('JWT'));
 for (const c of cleanups) c();
 fs.rmSync(dir, { recursive: true, force: true });
 console.log(`\n冒烟：${ok ? 'PASS' : 'FAIL'}`);

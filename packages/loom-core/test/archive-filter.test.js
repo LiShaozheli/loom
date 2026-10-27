@@ -37,23 +37,38 @@ function boot() {
 
 const ask = async (routes, url) => {
   let out = '';
-  await routes.get('/loom/archive').handler({ url }, { writeHead: () => {}, end: (b) => (out = b) });
+  await routes
+    .get('/loom/archive')
+    .handler({ url }, { writeHead: () => {}, end: (b) => (out = b) });
   return JSON.parse(out);
 };
 
 test('默认检索排除 tool 输出，显式可要回', async () => {
   const { dir, listeners, routes, cleanups } = boot();
-  const emit = (type, data) => listeners.get('session/event')({}, { type, data, seq: 1, time: Date.now() });
+  const emit = (type, data) =>
+    listeners.get('session/event')({}, { type, data, seq: 1, time: Date.now() });
 
   emit('user/message', { role: 'user', content: '发布流程是先灰度再全量。' });
-  emit('tool/result', { message: { role: 'tool', content: [{ type: 'text', text: '灰度 的搜索结果：一堆日志' }] } });
+  emit('tool/result', {
+    message: { role: 'tool', content: [{ type: 'text', text: '灰度 的搜索结果：一堆日志' }] },
+  });
 
   const def = await ask(routes, '/loom/archive?q=灰度');
-  assert.equal(def.hits.every((h) => h.role !== 'tool'), true, '默认不该返回 tool');
-  assert.ok(def.hits.some((h) => h.role === 'user'), '应返回对话原文');
+  assert.equal(
+    def.hits.every((h) => h.role !== 'tool'),
+    true,
+    '默认不该返回 tool'
+  );
+  assert.ok(
+    def.hits.some((h) => h.role === 'user'),
+    '应返回对话原文'
+  );
 
   const all = await ask(routes, '/loom/archive?q=灰度&roles=user,assistant,tool');
-  assert.ok(all.hits.some((h) => h.role === 'tool'), '显式要 tool 时应返回');
+  assert.ok(
+    all.hits.some((h) => h.role === 'tool'),
+    '显式要 tool 时应返回'
+  );
 
   for (const c of cleanups) c();
   fs.rmSync(dir, { recursive: true, force: true });
@@ -61,12 +76,15 @@ test('默认检索排除 tool 输出，显式可要回', async () => {
 
 test('存储没变：tool 输出仍然在归档里', async () => {
   const { dir, tools, listeners, cleanups } = boot();
-  listeners.get('session/event')({}, {
-    type: 'tool/result',
-    data: { message: { role: 'tool', content: [{ type: 'text', text: '工具输出内容' }] } },
-    seq: 1,
-    time: Date.now(),
-  });
+  listeners.get('session/event')(
+    {},
+    {
+      type: 'tool/result',
+      data: { message: { role: 'tool', content: [{ type: 'text', text: '工具输出内容' }] } },
+      seq: 1,
+      time: Date.now(),
+    }
+  );
   const hit = await tools.get('memory_archive_search').execute({ query: '工具输出内容' }, {});
   assert.ok(hit.total >= 1, '底层检索应能拿到 tool 内容（存储不变）');
   for (const c of cleanups) c();

@@ -48,7 +48,10 @@ function boot(extra = {}) {
       id,
       ctx: {
         effect: (fn) => fn(),
-        get: (n) => (n === 'systemPrompt' ? { section: (spec) => (agentSections.push(spec), () => {}) } : undefined),
+        get: (n) =>
+          n === 'systemPrompt'
+            ? { section: (spec) => (agentSections.push(spec), () => {}) }
+            : undefined,
       },
     };
     listeners.get('agent/created')?.({ agent });
@@ -59,7 +62,7 @@ function boot(extra = {}) {
 }
 
 test('注入按会话过滤：A 看不到 B 的记忆', async () => {
-  const { dir, call, createAgent, sections, cleanups } = boot({ memoryScope: 'session' });
+  const { dir, call, createAgent, cleanups } = boot({ memoryScope: 'session' });
   await call('memory_write', { line: '会话 A 的事实：端口 8081。', kind: 'fact' }, 'sess-A');
   await call('memory_write', { line: '会话 B 的事实：端口 9090。', kind: 'fact' }, 'sess-B');
 
@@ -95,7 +98,10 @@ test('shared 模式下注入仍是共享的', async () => {
 test('归档检索按会话过滤', async () => {
   const { dir, listeners, call, cleanups } = boot({ memoryScope: 'session' });
   const emit = (sessionId, text) =>
-    listeners.get('session/event')({ id: sessionId }, { type: 'user/message', data: { role: 'user', content: text }, seq: 1, time: Date.now() });
+    listeners.get('session/event')(
+      { id: sessionId },
+      { type: 'user/message', data: { role: 'user', content: text }, seq: 1, time: Date.now() }
+    );
 
   emit('sess-A', 'A 说的：灰度 10%');
   emit('sess-B', 'B 说的：灰度 50%');

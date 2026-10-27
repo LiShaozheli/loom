@@ -37,7 +37,10 @@ function boot() {
 }
 
 const emitUser = (listeners, text, seq = 1) =>
-  listeners.get('session/event')({}, { type: 'user/message', data: { role: 'user', content: text }, seq, time: Date.now() });
+  listeners.get('session/event')(
+    {},
+    { type: 'user/message', data: { role: 'user', content: text }, seq, time: Date.now() }
+  );
 
 test('用户陈述事实 → 自动写一条 claim', async () => {
   const { dir, tools, listeners, cleanups } = boot();

@@ -40,7 +40,10 @@ test('repo / session 不假装知道', async () => {
     { kind: 'repo', target: 'github.com/x/y', digest: 'sha' },
     { kind: 'session', target: 'sess-1' },
   ]);
-  assert.deepEqual(out.map((r) => r.status), ['unknown', 'unknown']);
+  assert.deepEqual(
+    out.map((r) => r.status),
+    ['unknown', 'unknown']
+  );
 });
 
 test('url：给了 fetchEtag 才判，没给就 unknown', async () => {

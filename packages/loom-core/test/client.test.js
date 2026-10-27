@@ -102,7 +102,12 @@ test('两个组件都是函数（可渲染）', () => {
   const def = loadClient();
   const body = def.factory((name) =>
     name === 'react'
-      ? { createElement: () => null, useState: (i) => [i, () => {}], useEffect: () => {}, useCallback: (f) => f }
+      ? {
+          createElement: () => null,
+          useState: (i) => [i, () => {}],
+          useEffect: () => {},
+          useCallback: (f) => f,
+        }
       : null
   );
   const regs = [];

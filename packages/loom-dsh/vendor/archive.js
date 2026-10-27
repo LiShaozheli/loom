@@ -24,8 +24,10 @@ export function messageText(message) {
     if (typeof block.text === 'string') parts.push(block.text);
     else if (block.type === 'image') parts.push('[图片]');
     else if (block.type === 'file') parts.push(`[文件 ${block.attachment?.name ?? ''}]`);
-    else if (block.type === 'tool_use') parts.push(`[调用 ${block.name ?? ''} ${JSON.stringify(block.input ?? {}).slice(0, 200)}]`);
-    else if (block.type === 'tool_result') parts.push(`[结果 ${String(block.content ?? '').slice(0, 200)}]`);
+    else if (block.type === 'tool_use')
+      parts.push(`[调用 ${block.name ?? ''} ${JSON.stringify(block.input ?? {}).slice(0, 200)}]`);
+    else if (block.type === 'tool_result')
+      parts.push(`[结果 ${String(block.content ?? '').slice(0, 200)}]`);
     else parts.push(`[${block.type ?? '未知块'}]`);
   }
   return parts.join('\n');
@@ -34,7 +36,10 @@ export function messageText(message) {
 /** 内容指纹：同一句话不会因为重复出现被记两遍 */
 export function messageKey(message) {
   const text = messageText(message);
-  return createHash('sha256').update(`${message?.role ?? ''}|${text}`).digest('hex').slice(0, 16);
+  return createHash('sha256')
+    .update(`${message?.role ?? ''}|${text}`)
+    .digest('hex')
+    .slice(0, 16);
 }
 
 /**

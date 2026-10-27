@@ -8,3 +8,6 @@
 .loom-data/
 loom-demo-*/
 dist/
+.npm-cache/
+*.bak-*
+tsc.log

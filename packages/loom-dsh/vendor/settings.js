@@ -15,26 +15,34 @@
 /** 每个键的规格：kind 决定怎么校验，其余字段是它的约束。 */
 export const SETTING_SPECS = Object.freeze({
   budget: {
-    kind: 'int', min: 50, max: 4000,
+    kind: 'int',
+    min: 50,
+    max: 4000,
     why: '单次取回的 token 预算。下限 50 保证至少能拿到一条断言；上限 4000 是一次查回来的合理体量，再多会挤掉正在做的活。',
   },
   hot: { kind: 'bool', why: '每轮是否把热记忆注入上下文。' },
   hotBytes: {
-    kind: 'int', min: 256, max: 32768,
+    kind: 'int',
+    min: 256,
+    max: 32768,
     why: '注入上限（字节）。它进每一轮上下文，所以上限卡在 32KB——超过这个数，长期成本比遗忘的代价还高。',
   },
   protocol: { kind: 'bool', why: '是否附带使用说明。' },
   autoCapture: { kind: 'bool', why: '是否从对话里自动记录。' },
   autoCaptureLevel: {
-    kind: 'enum', values: ['normal', 'strict'],
+    kind: 'enum',
+    values: ['normal', 'strict'],
     why: '记录宽窄：宽松连偏好一起记，严格只认硬事实。',
   },
   epochDays: {
-    kind: 'int', min: 1, max: 365,
+    kind: 'int',
+    min: 1,
+    max: 365,
     why: '时间片长度（天）。必须是正整数：0 会让时间片切分除零，太大则"删掉最近这段时间"变成删掉一整年。',
   },
   render: {
-    kind: 'enum', values: ['legend', 'plain', 'xml'],
+    kind: 'enum',
+    values: ['legend', 'plain', 'xml'],
     why: '取回时的排版：带图例是给人看的原始体验，纯文字省 token，结构化是给程序读的。',
   },
   scope: { kind: 'enum', values: ['global', 'workspace'], why: '记忆存在全局还是工作区。' },
@@ -43,11 +51,14 @@ export const SETTING_SPECS = Object.freeze({
     why: '库文件路径。只接受空串或绝对路径：相对路径会随 cwd 漂移，换一个目录就换一个库。',
   },
   memoryScope: {
-    kind: 'enum', values: ['shared', 'session'],
+    kind: 'enum',
+    values: ['shared', 'session'],
     why: '默认对话共享记忆，还是各自独立。',
   },
   isolatedSessions: {
-    kind: 'idList', maxItems: 100, maxLength: 200,
+    kind: 'idList',
+    maxItems: 100,
+    maxLength: 200,
     why: '要单独隔离的对话 id 列表。',
   },
 });
@@ -65,7 +76,8 @@ const describe = (spec) => {
   if (spec.kind === 'enum') return `以下之一：${spec.values.join(' / ')}`;
   if (spec.kind === 'bool') return 'true 或 false';
   if (spec.kind === 'path') return '绝对路径（或留空用默认位置）';
-  if (spec.kind === 'idList') return `字符串数组（最多 ${spec.maxItems} 项，每项不超过 ${spec.maxLength} 字）`;
+  if (spec.kind === 'idList')
+    return `字符串数组（最多 ${spec.maxItems} 项，每项不超过 ${spec.maxLength} 字）`;
   return '合法取值';
 };
 

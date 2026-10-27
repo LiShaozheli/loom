@@ -16,7 +16,11 @@ export class MemoryLedger {
   put(claim) {
     if (!claim?.id) throw new Error('claim.id is required');
     if (this.claims.has(claim.id)) return this.claims.get(claim.id);
-    this.claims.set(claim.id, { ...claim, useCount: claim.useCount ?? 0, cold: claim.cold ?? false });
+    this.claims.set(claim.id, {
+      ...claim,
+      useCount: claim.useCount ?? 0,
+      cold: claim.cold ?? false,
+    });
     return this.claims.get(claim.id);
   }
 
@@ -26,9 +30,7 @@ export class MemoryLedger {
 
   /** 只返回有效的（未失效、未过期） */
   active(kind) {
-    return [...this.claims.values()].filter(
-      (c) => !c.validTo && (!kind || c.kind === kind)
-    );
+    return [...this.claims.values()].filter((c) => !c.validTo && (!kind || c.kind === kind));
   }
 
   /** 冲突不覆盖：旧条目失效，指向新条目，并记录理由 */

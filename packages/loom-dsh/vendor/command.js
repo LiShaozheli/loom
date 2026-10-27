@@ -23,7 +23,10 @@ const pad = (n, w) => String(n).padStart(w);
  */
 export function runLoomCommand(rawInput, deps) {
   const { ledger, hot, verify } = deps;
-  const argv = String(rawInput ?? '').trim().split(/\s+/).filter(Boolean);
+  const argv = String(rawInput ?? '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
   const sub = argv[0] ?? '';
 
   try {
@@ -67,7 +70,8 @@ export function runLoomCommand(rawInput, deps) {
         const v = verify();
         return {
           kind: v.ok ? 'success' : 'error',
-          text: `哈希链：${v.ok ? '完好' : '异常'} · 时间片 ${v.epochs} · 事件 ${v.events}` +
+          text:
+            `哈希链：${v.ok ? '完好' : '异常'} · 时间片 ${v.epochs} · 事件 ${v.events}` +
             `\n当前分片：${v.current}`,
         };
       }

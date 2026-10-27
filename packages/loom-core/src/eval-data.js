@@ -15,12 +15,10 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 /** loom 仓库根目录（本文件在 packages/loom-core/src 下） */
 export const repoRoot = path.resolve(here, '../../..');
 
-const candidates = [
-  path.join(repoRoot, 'eval'),
-  path.resolve(repoRoot, '..', 'aiw'),
-];
+const candidates = [path.join(repoRoot, 'eval'), path.resolve(repoRoot, '..', 'aiw')];
 
-export const evalDir = candidates.find((dir) => fs.existsSync(path.join(dir, 'corpus.json'))) ?? candidates[0];
+export const evalDir =
+  candidates.find((dir) => fs.existsSync(path.join(dir, 'corpus.json'))) ?? candidates[0];
 
 export const corpusPath = path.join(evalDir, 'corpus.json');
 export const qaPath = path.join(evalDir, 'qa.json');

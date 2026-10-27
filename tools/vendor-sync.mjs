@@ -22,14 +22,21 @@ const checkOnly = process.argv.includes('--check');
 // eval-data.js 是离线评测语料，插件不需要，不进 vendor
 const SKIP = new Set(['eval-data.js']);
 
-const files = fs.readdirSync(srcDir).filter((f) => f.endsWith('.js') && !SKIP.has(f)).sort();
+const files = fs
+  .readdirSync(srcDir)
+  .filter((f) => f.endsWith('.js') && !SKIP.has(f))
+  .sort();
 if (!files.length) {
   console.error('源码目录是空的：' + srcDir);
   process.exit(1);
 }
 
 const same = (a, b) => {
-  try { return fs.readFileSync(a).equals(fs.readFileSync(b)); } catch { return false; }
+  try {
+    return fs.readFileSync(a).equals(fs.readFileSync(b));
+  } catch {
+    return false;
+  }
 };
 
 const drifted = [];
@@ -45,8 +52,7 @@ for (const f of files) {
 }
 
 // vendor 里多出来的文件也算漂移：删了源码还留着旧副本，同样会骗人
-const extra = fs.readdirSync(dstDir)
-  .filter((f) => f.endsWith('.js') && !files.includes(f));
+const extra = fs.readdirSync(dstDir).filter((f) => f.endsWith('.js') && !files.includes(f));
 
 if (checkOnly) {
   if (drifted.length || extra.length) {

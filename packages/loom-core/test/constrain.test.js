@@ -10,13 +10,20 @@ test('brief：模型给的事实排在规则前面，且去重', () => {
   assert.equal(b.mustKeep[0].term, 'ENOENT');
   const terms = b.mustKeep.map((t) => t.term);
   assert.equal(new Set(terms).size, terms.length, '不许重复');
-  assert.ok(terms.some((t) => t.includes('path.join')), '规则那条地板还在');
+  assert.ok(
+    terms.some((t) => t.includes('path.join')),
+    '规则那条地板还在'
+  );
 });
 
 test('brief：约束写进指令，且不带装饰符号', () => {
   const b = brief(ORIGINAL);
   assert.ok(b.instruction.includes('ENOENT'), '事实要出现在指令里');
-  assert.equal(b.instruction.includes('「ENOENT」'), false, '不要用「」包起来——模型会把引号写进输出');
+  assert.equal(
+    b.instruction.includes('「ENOENT」'),
+    false,
+    '不要用「」包起来——模型会把引号写进输出'
+  );
   assert.ok(b.instruction.includes('不要写 @时间'));
   assert.ok(b.instruction.includes('长度上限'));
 });

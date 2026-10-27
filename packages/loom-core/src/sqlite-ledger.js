@@ -11,7 +11,6 @@ import { createHash } from 'node:crypto';
 import { bigrams, contentBigrams, unigrams } from './aiw.js';
 export { bigrams };
 
-
 const DDL = `
 PRAGMA journal_mode = WAL;
 
@@ -215,7 +214,9 @@ export class SqliteLedger {
         claim.sessionId ?? null
       );
     const rowid = this.db.prepare('SELECT rowid FROM claim WHERE id = ?').get(claim.id).rowid;
-    this.db.prepare('INSERT INTO claim_fts (rowid, aiw, bg, title) VALUES (?,?,?,?)').run(rowid, claim.aiw, bg, claim.title);
+    this.db
+      .prepare('INSERT INTO claim_fts (rowid, aiw, bg, title) VALUES (?,?,?,?)')
+      .run(rowid, claim.aiw, bg, claim.title);
     return claim;
   }
 
@@ -300,8 +301,12 @@ export class SqliteLedger {
     this.db
       .prepare('UPDATE claim SET valid_to = ?, superseded_by = ? WHERE id = ?')
       .run(Date.now(), newId, oldId);
-    this.db.exec('CREATE TABLE IF NOT EXISTS supersede_log (at INTEGER, old_id TEXT, new_id TEXT, reason TEXT)');
-    this.db.prepare('INSERT INTO supersede_log VALUES (?,?,?,?)').run(Date.now(), oldId, newId, reason);
+    this.db.exec(
+      'CREATE TABLE IF NOT EXISTS supersede_log (at INTEGER, old_id TEXT, new_id TEXT, reason TEXT)'
+    );
+    this.db
+      .prepare('INSERT INTO supersede_log VALUES (?,?,?,?)')
+      .run(Date.now(), oldId, newId, reason);
     return this.get(oldId);
   }
 
@@ -336,10 +341,15 @@ export class SqliteLedger {
       const uexpr = uni.map((t) => `"${t}"`).join(' OR ');
       const umatch = `bg:(${uexpr}) OR title:(${uexpr})`;
       const uargs = kind ? [umatch, kind, limit] : [umatch, limit];
-      return this.db.prepare(sql).all(...uargs).map((r) => this.#map(r));
+      return this.db
+        .prepare(sql)
+        .all(...uargs)
+        .map((r) => this.#map(r));
     } catch {
       // FTS 语法不容错：查询里带特殊字符时退化为子串匹配
-      return this.active(kind, { session }).filter((c) => `${c.aiw} ${c.title}`.includes(query)).slice(0, limit);
+      return this.active(kind, { session })
+        .filter((c) => `${c.aiw} ${c.title}`.includes(query))
+        .slice(0, limit);
     }
   }
 
@@ -348,7 +358,9 @@ export class SqliteLedger {
     const cur = this.get(id);
     if (!cur) return null;
     this.db
-      .prepare('UPDATE claim SET salience = ?, use_count = ?, last_used_at = ?, cold = ? WHERE id = ?')
+      .prepare(
+        'UPDATE claim SET salience = ?, use_count = ?, last_used_at = ?, cold = ? WHERE id = ?'
+      )
       .run(
         patch.salience ?? cur.salience,
         patch.useCount ?? cur.useCount,
@@ -361,21 +373,31 @@ export class SqliteLedger {
 
   addRef(claimId, ref) {
     this.db
-      .prepare('INSERT OR REPLACE INTO external_ref (claim_id,kind,target,digest,checked_at,status) VALUES (?,?,?,?,?,?)')
-      .run(claimId, ref.kind, ref.target, ref.digest ?? null, ref.checkedAt ?? null, ref.status ?? 'unknown');
+      .prepare(
+        'INSERT OR REPLACE INTO external_ref (claim_id,kind,target,digest,checked_at,status) VALUES (?,?,?,?,?,?)'
+      )
+      .run(
+        claimId,
+        ref.kind,
+        ref.target,
+        ref.digest ?? null,
+        ref.checkedAt ?? null,
+        ref.status ?? 'unknown'
+      );
   }
 
   refsOf(claimId) {
     return this.db.prepare('SELECT * FROM external_ref WHERE claim_id = ?').all(claimId);
   }
 
-
   // ---------------- 关系边 ----------------
 
   link(fromId, toId, { type = 'semantic', weight = 1, now = Date.now() } = {}) {
     if (!fromId || !toId || fromId === toId) return null;
     this.db
-      .prepare('INSERT OR REPLACE INTO edge (from_id,to_id,type,weight,created_at) VALUES (?,?,?,?,?)')
+      .prepare(
+        'INSERT OR REPLACE INTO edge (from_id,to_id,type,weight,created_at) VALUES (?,?,?,?,?)'
+      )
       .run(fromId, toId, type, weight, now);
     return { fromId, toId, type, weight };
   }
@@ -407,7 +429,13 @@ export class SqliteLedger {
           seen.add(e.other);
           next.push(e.other);
           const c = this.get(e.other);
-          out.push({ id: e.other, distance: d, type: e.type, title: c?.title ?? '', kind: c?.kind ?? null });
+          out.push({
+            id: e.other,
+            distance: d,
+            type: e.type,
+            title: c?.title ?? '',
+            kind: c?.kind ?? null,
+          });
         }
       }
       frontier = next;
@@ -419,7 +447,7 @@ export class SqliteLedger {
   // ---------------- 项目文档 ----------------
 
   /** 写一篇文档；同标题视为同一篇（更新而不是堆叠） */
-  putDoc({ id, title, body, tags = '' , now = Date.now() }) {
+  putDoc({ id, title, body, tags = '', now = Date.now() }) {
     const docId = id ?? `doc-${this.#hash(title)}`;
     const bg = bigrams(`${title} ${body}`);
     const cur = this.db.prepare('SELECT created_at FROM doc WHERE id = ?').get(docId);
@@ -429,12 +457,18 @@ export class SqliteLedger {
          ON CONFLICT(id) DO UPDATE SET title=excluded.title, body=excluded.body, bg=excluded.bg, tags=excluded.tags, updated_at=excluded.updated_at`
       )
       .run(docId, title, body, bg, tags, cur?.created_at ?? now, now);
-    this.db.prepare('DELETE FROM doc_fts WHERE rowid = (SELECT rowid FROM doc WHERE id = ?)').run(docId);
+    this.db
+      .prepare('DELETE FROM doc_fts WHERE rowid = (SELECT rowid FROM doc WHERE id = ?)')
+      .run(docId);
     const row = this.db.prepare('SELECT rowid FROM doc WHERE id = ?').get(docId);
-    this.db.prepare('INSERT INTO doc_fts (rowid, bg, title) VALUES (?,?,?)').run(row.rowid, bg, title);
+    this.db
+      .prepare('INSERT INTO doc_fts (rowid, bg, title) VALUES (?,?,?)')
+      .run(row.rowid, bg, title);
 
     // 版本化：正文变了才留一版，同内容重复写不堆版本
-    const last = this.db.prepare('SELECT rev, body FROM doc_rev WHERE doc_id = ? ORDER BY rev DESC LIMIT 1').get(docId);
+    const last = this.db
+      .prepare('SELECT rev, body FROM doc_rev WHERE doc_id = ? ORDER BY rev DESC LIMIT 1')
+      .get(docId);
     if (!last || last.body !== body) {
       this.db
         .prepare('INSERT INTO doc_rev (doc_id, rev, title, body, at) VALUES (?,?,?,?,?)')
@@ -461,7 +495,13 @@ export class SqliteLedger {
            WHERE doc_fts MATCH ? AND d.cold = 0 ORDER BY bm25(doc_fts) LIMIT ?`
         )
         .all(match, limit)
-        .map((r) => ({ id: r.id, title: r.title, body: r.body, tags: r.tags, updatedAt: r.updated_at }));
+        .map((r) => ({
+          id: r.id,
+          title: r.title,
+          body: r.body,
+          tags: r.tags,
+          updatedAt: r.updated_at,
+        }));
     } catch {
       return [];
     }
@@ -469,7 +509,9 @@ export class SqliteLedger {
 
   /** 按正文找文档：遗忘一条记忆时，用它把一起写下的文档也标冷 */
   docsByBody(body) {
-    return this.db.prepare('SELECT id,title FROM doc WHERE body = ? AND cold = 0').all(String(body ?? ''));
+    return this.db
+      .prepare('SELECT id,title FROM doc WHERE body = ? AND cold = 0')
+      .all(String(body ?? ''));
   }
 
   setDocCold(id, cold = true) {
@@ -480,18 +522,32 @@ export class SqliteLedger {
   /** 一篇文档的历史版本（新的在前） */
   docRevisions(id) {
     return this.db
-      .prepare('SELECT doc_id, rev, title, body, at FROM doc_rev WHERE doc_id = ? ORDER BY rev DESC')
+      .prepare(
+        'SELECT doc_id, rev, title, body, at FROM doc_rev WHERE doc_id = ? ORDER BY rev DESC'
+      )
       .all(id);
   }
 
   /** 全量 claim（含已失效），用于导出 */
   allClaims() {
-    return this.db.prepare('SELECT * FROM claim ORDER BY valid_from').all().map((r) => this.#map(r));
+    return this.db
+      .prepare('SELECT * FROM claim ORDER BY valid_from')
+      .all()
+      .map((r) => this.#map(r));
   }
 
   /** 全量边，用于导出 */
   allEdges() {
-    return this.db.prepare('SELECT * FROM edge').all().map((e) => ({ from: e.from_id, to: e.to_id, type: e.type, weight: e.weight, createdAt: e.created_at }));
+    return this.db
+      .prepare('SELECT * FROM edge')
+      .all()
+      .map((e) => ({
+        from: e.from_id,
+        to: e.to_id,
+        type: e.type,
+        weight: e.weight,
+        createdAt: e.created_at,
+      }));
   }
 
   /** 全量文档（含冷），用于导出 */
@@ -501,9 +557,7 @@ export class SqliteLedger {
 
   docs(limit = 0) {
     const sql = 'SELECT id,title,tags,updated_at FROM doc WHERE cold = 0 ORDER BY updated_at DESC';
-    return limit > 0
-      ? this.db.prepare(`${sql} LIMIT ?`).all(limit)
-      : this.db.prepare(sql).all();
+    return limit > 0 ? this.db.prepare(`${sql} LIMIT ?`).all(limit) : this.db.prepare(sql).all();
   }
 
   #hash(s) {

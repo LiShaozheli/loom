@@ -13,10 +13,15 @@ test('寒暄也要归档——原文不筛', () => {
   const c = new Chronicle(dir);
   const ep = c.createEpoch('ep');
   const seen = new Set();
-  const r = archiveMessages(c, ep, [
-    { role: 'user', content: '嗯' },
-    { role: 'assistant', content: '好的' },
-  ], seen);
+  const r = archiveMessages(
+    c,
+    ep,
+    [
+      { role: 'user', content: '嗯' },
+      { role: 'assistant', content: '好的' },
+    ],
+    seen
+  );
   assert.equal(r.archived, 2);
   assert.equal(c.read(ep).length, 2);
   fs.rmSync(dir, { recursive: true, force: true });
@@ -64,16 +69,27 @@ test('空内容与非对话角色跳过', () => {
   const dir = tmp();
   const c = new Chronicle(dir);
   const ep = c.createEpoch('ep');
-  const r = archiveMessages(c, ep, [
-    { role: 'user', content: '' },
-    { role: 'tool', content: 'x' },
-    { role: 'user', content: [{ type: 'unknown' }] },
-  ], new Set());
+  const r = archiveMessages(
+    c,
+    ep,
+    [
+      { role: 'user', content: '' },
+      { role: 'tool', content: 'x' },
+      { role: 'user', content: [{ type: 'unknown' }] },
+    ],
+    new Set()
+  );
   assert.equal(r.archived, 1, '未知块也要留个占位，只跳过真正的空内容');
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
 test('指纹稳定：同样的角色+内容得到同样的 key', () => {
-  assert.equal(messageKey({ role: 'user', content: 'a' }), messageKey({ role: 'user', content: 'a' }));
-  assert.notEqual(messageKey({ role: 'user', content: 'a' }), messageKey({ role: 'assistant', content: 'a' }));
+  assert.equal(
+    messageKey({ role: 'user', content: 'a' }),
+    messageKey({ role: 'user', content: 'a' })
+  );
+  assert.notEqual(
+    messageKey({ role: 'user', content: 'a' }),
+    messageKey({ role: 'assistant', content: 'a' })
+  );
 });

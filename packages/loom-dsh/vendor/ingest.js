@@ -35,7 +35,17 @@ export function claimId(text) {
  * @returns {{ ok: boolean, claim?: any, gate: import('./contracts.js').GateResult, stripped: string }}
  */
 export function ingest(input) {
-  const { line, body, kind = 'fact', epochId, ledger, original, mustKeep, minRecall, title } = input;
+  const {
+    line,
+    body,
+    kind = 'fact',
+    epochId,
+    ledger,
+    original,
+    mustKeep,
+    minRecall,
+    title,
+  } = input;
 
   // 1) 剥尾 —— 整个系统里唯一一次
   const aiw = stripTail(line ?? body ?? '');

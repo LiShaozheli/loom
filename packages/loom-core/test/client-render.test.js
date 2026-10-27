@@ -21,10 +21,19 @@ const SEED = {
   items: [{ id: '2e8afb09', kind: 'fact', aiw: '这个项目用 pnpm' }],
   recent: [],
   config: {
-    budget: 300, hot: true, hotBytes: 2048, protocol: true, autoCapture: true,
-    autoCaptureLevel: 'normal', epochDays: 7, render: 'legend', scope: 'global',
-    memoryScope: 'shared', isolatedSessions: ['sess-B'],
-    dbPath: '', dbPathEffective: 'C:\\Users\\x\\.dsh\\loom\\loom.db',
+    budget: 300,
+    hot: true,
+    hotBytes: 2048,
+    protocol: true,
+    autoCapture: true,
+    autoCaptureLevel: 'normal',
+    epochDays: 7,
+    render: 'legend',
+    scope: 'global',
+    memoryScope: 'shared',
+    isolatedSessions: ['sess-B'],
+    dbPath: '',
+    dbPathEffective: 'C:\\Users\\x\\.dsh\\loom\\loom.db',
   },
 };
 
@@ -46,7 +55,9 @@ function makeFakeReact(tabToForce) {
     useCallback: (fn) => fn,
     useRef: (v) => ({ current: v }),
   };
-  React.__reset = () => { call = 0; };
+  React.__reset = () => {
+    call = 0;
+  };
   return React;
 }
 
@@ -55,19 +66,34 @@ function render(tab) {
   let captured = null;
   const React = makeFakeReact(tab);
   const win = {
-    __ModuleLoader__: { load: (def) => { captured = def; } },
+    __ModuleLoader__: {
+      load: (def) => {
+        captured = def;
+      },
+    },
     __LOOM_SEED__: SEED,
     __DSH_TRANSPORT__: { streamBaseUrl: 'ws://127.0.0.1:1296/api' },
     confirm: () => true,
   };
   const run = new Function('window', 'location', 'require', 'fetch', `${source}\n`);
-  run(win, { href: 'http://127.0.0.1:1296/#session-aaaa', protocol: 'http:' },
-    (name) => (name === 'react' ? React : null), async () => ({ ok: true, json: async () => ({}) }));
+  run(
+    win,
+    { href: 'http://127.0.0.1:1296/#session-aaaa', protocol: 'http:' },
+    (name) => (name === 'react' ? React : null),
+    async () => ({ ok: true, json: async () => ({}) })
+  );
 
   assert.ok(captured, 'client.js 应当注册到 ModuleLoader');
   const api = captured.factory((name) => (name === 'react' ? React : null));
   let Panel = null;
-  api.apply({ slots: { inject: (_s, fn) => fn(), register: (o, C) => { if (o.name === 'main') Panel = C; } } });
+  api.apply({
+    slots: {
+      inject: (_s, fn) => fn(),
+      register: (o, C) => {
+        if (o.name === 'main') Panel = C;
+      },
+    },
+  });
   assert.equal(typeof Panel, 'function');
   React.__reset();
   return Panel();
@@ -106,7 +132,9 @@ function collect(tree) {
 
 test('设置页能渲染，六个分组齐全', () => {
   let tree = null;
-  assert.doesNotThrow(() => { tree = render('设置'); });
+  assert.doesNotThrow(() => {
+    tree = render('设置');
+  });
   const { texts } = collect(tree);
   for (const g of ['记忆范围', '每轮注入', '自动记录', '存储', '高级', '备份']) {
     assert.ok(texts.includes(g), `缺分组：${g}`);
@@ -120,13 +148,19 @@ test('开关/单选/数字输入都带上了无障碍绑定', () => {
   assert.ok(switches.length >= 3, `开关数量不对：${switches.length}`);
   for (const sw of switches) {
     assert.equal(typeof sw.props['aria-checked'], 'boolean', 'switch 必须暴露 aria-checked');
-    assert.ok(String(sw.props['aria-labelledby'] || '').startsWith('lm-lab-'), 'switch 必须绑到 label');
+    assert.ok(
+      String(sw.props['aria-labelledby'] || '').startsWith('lm-lab-'),
+      'switch 必须绑到 label'
+    );
   }
 
   const groups = els.filter((e) => e.props && e.props.role === 'radiogroup');
   assert.ok(groups.length >= 4, `单选组数量不对：${groups.length}`);
   for (const g of groups) {
-    assert.ok(String(g.props['aria-labelledby'] || '').startsWith('lm-lab-'), 'radiogroup 必须绑到 label');
+    assert.ok(
+      String(g.props['aria-labelledby'] || '').startsWith('lm-lab-'),
+      'radiogroup 必须绑到 label'
+    );
   }
 
   const inputs = els.filter((e) => e.type === 'input' && e.props && e.props['aria-labelledby']);
@@ -144,12 +178,20 @@ test('每个配置项旁边都有保存状态位，且不再渲染 undefined', (
       assert.ok(String(e.type) !== 'undefined');
     }
   }
-  assert.ok(els.some((e) => e.props && String(e.props.className || '').includes('lm-field')),
-    '数字输入应该用带单位的 lm-field');
+  assert.ok(
+    els.some((e) => e.props && String(e.props.className || '').includes('lm-field')),
+    '数字输入应该用带单位的 lm-field'
+  );
 });
 
 test('库路径显示「当前生效」的真实位置', () => {
   const { texts } = collect(render('设置'));
-  assert.ok(texts.some((t) => t.startsWith('当前生效：')), '应当显示当前生效的库路径');
-  assert.ok(texts.some((t) => t.includes('loom.db')), '应当带上真实路径');
+  assert.ok(
+    texts.some((t) => t.startsWith('当前生效：')),
+    '应当显示当前生效的库路径'
+  );
+  assert.ok(
+    texts.some((t) => t.includes('loom.db')),
+    '应当带上真实路径'
+  );
 });

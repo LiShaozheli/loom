@@ -11,22 +11,61 @@ function makeDeflateZip(name, data, { method = 8 } = {}) {
   const nameBuf = Buffer.from(name, 'utf8');
   const raw = Buffer.isBuffer(data) ? data : Buffer.from(data);
   const comp = zlib.deflateRawSync(raw);
-  const u32 = (n) => { const b = Buffer.alloc(4); b.writeUInt32LE(n >>> 0); return b; };
-  const u16 = (n) => { const b = Buffer.alloc(2); b.writeUInt16LE(n); return b; };
+  const u32 = (n) => {
+    const b = Buffer.alloc(4);
+    b.writeUInt32LE(n >>> 0);
+    return b;
+  };
+  const u16 = (n) => {
+    const b = Buffer.alloc(2);
+    b.writeUInt16LE(n);
+    return b;
+  };
 
   const local = Buffer.concat([
-    u32(0x04034b50), u16(20), u16(0), u16(method), u16(0), u16(0),
-    u32(crc32(raw)), u32(comp.length), u32(raw.length), u16(nameBuf.length), u16(0),
-    nameBuf, comp,
+    u32(0x04034b50),
+    u16(20),
+    u16(0),
+    u16(method),
+    u16(0),
+    u16(0),
+    u32(crc32(raw)),
+    u32(comp.length),
+    u32(raw.length),
+    u16(nameBuf.length),
+    u16(0),
+    nameBuf,
+    comp,
   ]);
   const central = Buffer.concat([
-    u32(0x02014b50), u16(20), u16(20), u16(0), u16(method), u16(0), u16(0),
-    u32(crc32(raw)), u32(comp.length), u32(raw.length), u16(nameBuf.length),
-    u16(0), u16(0), u16(0), u16(0), u32(0), u32(0), nameBuf,
+    u32(0x02014b50),
+    u16(20),
+    u16(20),
+    u16(0),
+    u16(method),
+    u16(0),
+    u16(0),
+    u32(crc32(raw)),
+    u32(comp.length),
+    u32(raw.length),
+    u16(nameBuf.length),
+    u16(0),
+    u16(0),
+    u16(0),
+    u16(0),
+    u32(0),
+    u32(0),
+    nameBuf,
   ]);
   const end = Buffer.concat([
-    u32(0x06054b50), u16(0), u16(0), u16(1), u16(1),
-    u32(central.length), u32(local.length), u16(0),
+    u32(0x06054b50),
+    u16(0),
+    u16(0),
+    u16(1),
+    u16(1),
+    u32(central.length),
+    u32(local.length),
+    u16(0),
   ]);
   const zip = Buffer.concat([local, central, end]);
   return { zip, centralOffset: local.length, localOffset: 0 };
@@ -84,7 +123,10 @@ test('条目数超过上限直接拒绝', () => {
 });
 
 test('解压总量超过上限直接拒绝', () => {
-  const one = makeZip([{ name: 'a.txt', data: 'a'.repeat(1000) }, { name: 'b.txt', data: 'b'.repeat(1000) }]);
+  const one = makeZip([
+    { name: 'a.txt', data: 'a'.repeat(1000) },
+    { name: 'b.txt', data: 'b'.repeat(1000) },
+  ]);
   assert.equal(readZip(one, { maxTotalBytes: 2000 }).size, 2);
   assert.throws(() => readZip(one, { maxTotalBytes: 1500 }), /总量/);
 });
@@ -92,7 +134,10 @@ test('解压总量超过上限直接拒绝', () => {
 test('数据段越界报自己的错，而不是 Buffer 越界异常', () => {
   const { zip } = makeDeflateZip('x.txt', 'hello world');
   const truncated = zip.subarray(0, zip.length - 40);
-  assert.throws(() => readZip(truncated), (e) => e instanceof Error && /越界|损坏|合法/.test(e.message));
+  assert.throws(
+    () => readZip(truncated),
+    (e) => e instanceof Error && /越界|损坏|合法/.test(e.message)
+  );
 });
 
 test('不支持的压缩方式明确报错', () => {

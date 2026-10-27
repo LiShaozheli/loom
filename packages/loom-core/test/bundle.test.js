@@ -4,12 +4,29 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { SqliteLedger } from '../src/sqlite-ledger.js';
-import { exportBundle, bundleToZip, zipToBundle, importBundle, exportToZip, importFromZip } from '../src/bundle.js';
+import {
+  exportBundle,
+  bundleToZip,
+  zipToBundle,
+  importBundle,
+  exportToZip,
+  importFromZip,
+} from '../src/bundle.js';
 
 const claim = (id, aiw = '正文。') => ({
-  id, kind: 'fact', body: aiw, aiw, title: aiw.slice(0, 6),
-  confidence: 'high', source: { eventId: 'e' }, epochId: 'ep', taint: 'none',
-  validFrom: 1, salience: 1, useCount: 0, cold: false,
+  id,
+  kind: 'fact',
+  body: aiw,
+  aiw,
+  title: aiw.slice(0, 6),
+  confidence: 'high',
+  source: { eventId: 'e' },
+  epochId: 'ep',
+  taint: 'none',
+  validFrom: 1,
+  salience: 1,
+  useCount: 0,
+  cold: false,
 });
 
 test('导出结构：claims / docs / revs / edges 都在', () => {

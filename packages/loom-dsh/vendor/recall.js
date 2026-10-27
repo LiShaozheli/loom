@@ -26,15 +26,27 @@ import { chars4Counter } from './contracts.js';
  */
 export function recall(input) {
   const {
-    query, claims = [], search,
+    query,
+    claims = [],
+    search,
     ctx = {},
-    budget = 400, outlineBudget = 120,
-    counter = chars4Counter, minScore = 0.05,
+    budget = 400,
+    outlineBudget = 120,
+    counter = chars4Counter,
+    minScore = 0.05,
   } = input;
 
   const admission = shouldRecall(query, ctx);
   if (!admission.recall) {
-    return { skipped: true, admission, items: [], pointers: [], usedTokens: 0, outline: null, route: null };
+    return {
+      skipped: true,
+      admission,
+      items: [],
+      pointers: [],
+      usedTokens: 0,
+      outline: null,
+      route: null,
+    };
   }
 
   const route = routeQuery(query);
@@ -46,7 +58,10 @@ export function recall(input) {
     .filter((x) => x.score >= minScore)
     .sort((a, b) => b.score - a.score);
 
-  const outline = buildOutline(scored.map((x) => x.claim), { budget: outlineBudget, counter });
+  const outline = buildOutline(
+    scored.map((x) => x.claim),
+    { budget: outlineBudget, counter }
+  );
   const alloc = allocate({ candidates: scored, budget, counter, minScore });
 
   return {

@@ -35,7 +35,11 @@ export async function checkRefs(refs, io = {}) {
     if (ref.kind === 'file') {
       try {
         const actual = sha256(readFile(ref.target));
-        out.push({ ...base, status: !ref.digest ? 'unknown' : actual === ref.digest ? 'fresh' : 'stale', digest: ref.digest ?? actual });
+        out.push({
+          ...base,
+          status: !ref.digest ? 'unknown' : actual === ref.digest ? 'fresh' : 'stale',
+          digest: ref.digest ?? actual,
+        });
       } catch {
         out.push({ ...base, status: 'unknown' });
       }
@@ -48,7 +52,10 @@ export async function checkRefs(refs, io = {}) {
       }
       try {
         const etag = await io.fetchEtag(ref.target);
-        out.push({ ...base, status: !ref.digest || !etag ? 'unknown' : etag === ref.digest ? 'fresh' : 'stale' });
+        out.push({
+          ...base,
+          status: !ref.digest || !etag ? 'unknown' : etag === ref.digest ? 'fresh' : 'stale',
+        });
       } catch {
         out.push({ ...base, status: 'unknown' });
       }

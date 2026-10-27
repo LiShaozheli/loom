@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "target": "ES2023",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "types": ["node"],
+    "strict": false,
+    "noImplicitAny": false,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": [
+    "packages/loom-core/src/**/*.js",
+    "packages/loom-core/bin/**/*.js",
+    "packages/loom-core/test/**/*.js",
+    "packages/loom-dsh/*.js",
+    "tools/**/*.mjs"
+  ],
+  "exclude": ["node_modules", "packages/loom-dsh/vendor/**"]
+}

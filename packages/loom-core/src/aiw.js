@@ -20,7 +20,7 @@ const isLatinDigit = (ch) => /[A-Za-z0-9]/.test(ch);
 export const normalize = (s) => s.normalize('NFKC').toLowerCase().replace(/\s+/g, '');
 
 /** 尾部三元：@时间 #来源 置信。置信既接受符号，也接受「高/中/低」——人写记忆时更自然会写汉字。 */
-const CONF_WORD = { '!': 'high', '?': 'medium', '~': 'low', '高': 'high', '中': 'medium', '低': 'low' };
+const CONF_WORD = { '!': 'high', '?': 'medium', '~': 'low', 高: 'high', 中: 'medium', 低: 'low' };
 const TAIL_RE = /@([^\s，。；、]+)(?:\s+#([^\s，。、；]+))?(?:\s*([!?~]|高|中|低))?$/;
 
 /** 从作者格式里剥掉 `@时间 #来源 置信` —— 注入前必须做这一步 */
@@ -37,7 +37,7 @@ export function parseTail(line) {
   return {
     date: m[1],
     source: m[2] ?? null,
-    confidence: m[3] ? CONF_WORD[m[3]] ?? null : null,
+    confidence: m[3] ? (CONF_WORD[m[3]] ?? null) : null,
   };
 }
 
@@ -67,7 +67,8 @@ export function lintBody(body, { tier = 'full' } = {}) {
   if (marks > 1) add('ERROR', 'B3', `「。」出现 ${marks} 次：一行一断言`);
   if (marks === 1 && !text.endsWith('。')) add('ERROR', 'B3', '「。」必须在正文末尾');
 
-  for (const w of VAGUE) if (text.includes(w)) add('WARN', 'B4', `歧义词「${w}」：压缩时最先被删的就是消歧信息`);
+  for (const w of VAGUE)
+    if (text.includes(w)) add('WARN', 'B4', `歧义词「${w}」：压缩时最先被删的就是消歧信息`);
 
   const bad = new Set();
   for (const ch of text) {
@@ -85,7 +86,8 @@ export function lintLine(line, { tier = 'full' } = {}) {
   const issues = lintBody(stripTail(line), { tier });
   const tail = parseTail(line);
   if (tier !== 'title') {
-    if (!tail) issues.push({ level: 'ERROR', code: 'M1', msg: '缺尾部 @时间 #来源 置信（作者格式）' });
+    if (!tail)
+      issues.push({ level: 'ERROR', code: 'M1', msg: '缺尾部 @时间 #来源 置信（作者格式）' });
     else {
       if (!tail.source) issues.push({ level: 'ERROR', code: 'M2', msg: '缺 #来源，无法回源' });
       if (!tail.confidence) issues.push({ level: 'WARN', code: 'M3', msg: '缺置信标 ! ? ~' });
@@ -96,10 +98,24 @@ export function lintLine(line, { tier = 'full' } = {}) {
 
 /* ---------------- 别名：换编码后仍认得出同一事实 ---------------- */
 export const ALIASES = {
-  鉴权: ['auth'], 回滚: ['rollback'], 备份: ['backup'], 嵌套: ['nest'], 校验: ['validate'],
-  超时: ['timeout'], 重试: ['retry'], 依赖: ['dep'], 文档: ['doc'], 注释: ['comment'],
-  压缩: ['compress'], 存储: ['store'], 索引: ['index'], 未决: ['open'], 待办: ['todo'],
-  对比: ['vs'], 大约: ['approx'], 后四位: ['后4位'],
+  鉴权: ['auth'],
+  回滚: ['rollback'],
+  备份: ['backup'],
+  嵌套: ['nest'],
+  校验: ['validate'],
+  超时: ['timeout'],
+  重试: ['retry'],
+  依赖: ['dep'],
+  文档: ['doc'],
+  注释: ['comment'],
+  压缩: ['compress'],
+  存储: ['store'],
+  索引: ['index'],
+  未决: ['open'],
+  待办: ['todo'],
+  对比: ['vs'],
+  大约: ['approx'],
+  后四位: ['后4位'],
 };
 
 const CANON = (() => {
@@ -174,14 +190,17 @@ export const ABBREV = {
 /** 抽出「技术标识符」，用于编造检测。先按分隔符拆开，避免把 admin/editor/viewer 当成一个词 */
 export function identifiers(text) {
   const raw = stripTail(text ?? '').match(/[A-Za-z][A-Za-z0-9_./:-]*/g) || [];
-  const parts = raw.flatMap((s) => s.split('/')).map((s) => s.replace(/[./:_-]+$/, '')).filter(Boolean);
+  const parts = raw
+    .flatMap((s) => s.split('/'))
+    .map((s) => s.replace(/[./:_-]+$/, ''))
+    .filter(Boolean);
   const looksLikeId = (s) => {
     const upper = (s.match(/[A-Z]/g) || []).length;
     return (
-      /^[A-Z]{2,}$/.test(s) ||           // ENOENT / JWT
-      /[0-9_./-]/.test(s) ||             // path.join / X-Tenant-Id
-      /^[a-z]+[A-Z]/.test(s) ||          // camelCase
-      upper >= 2                          // ESLint / TypeScript / GitHub
+      /^[A-Z]{2,}$/.test(s) || // ENOENT / JWT
+      /[0-9_./-]/.test(s) || // path.join / X-Tenant-Id
+      /^[a-z]+[A-Z]/.test(s) || // camelCase
+      upper >= 2 // ESLint / TypeScript / GitHub
     );
   };
   return [...new Set(parts.filter((s) => s.length >= 2 && looksLikeId(s)))];
@@ -189,7 +208,7 @@ export function identifiers(text) {
 /** 把中文切成 bigram；拉丁/数字整段保留。
  *  必须先按文字系统切开：「报ENOENT」若整段处理会切出 报e/en/no，中文那半边就丢了。 */
 export function bigrams(text) {
-  const raw = String(text ?? "");
+  const raw = String(text ?? '');
   const out = new Set();
   for (const run of raw.matchAll(/[\p{Script=Han}]+/gu)) {
     const ch = [...run[0]];
@@ -197,25 +216,29 @@ export function bigrams(text) {
     for (let i = 0; i < ch.length - 1; i++) out.add(ch[i] + ch[i + 1]);
   }
   for (const m of raw.matchAll(/[A-Za-z0-9][A-Za-z0-9_.:-]*/g)) out.add(m[0].toLowerCase());
-  return [...out].join(" ");
+  return [...out].join(' ');
 }
 
 /** 疑问词与虚词：查询里它们只会稀释分母，检索前先去掉 */
-const QUERY_STOP = /是多少|是什么|什么样|什么|怎么样|怎么|为什么|如何|是不是|能不能|有没有|哪个|哪些|多少|吗|呢|的|了|吧|啊|[?？!！,，。；;]/g;
+const QUERY_STOP =
+  /是多少|是什么|什么样|什么|怎么样|怎么|为什么|如何|是不是|能不能|有没有|哪个|哪些|多少|吗|呢|的|了|吧|啊|[?？!！,，。；;]/g;
 
 /** 查询用 bigram：先去掉疑问词再切，避免「报的是什么错」被切成 报的/的是/是什/什么/么错 */
 export function contentBigrams(text) {
-  const cleaned = String(text ?? "").replace(QUERY_STOP, " ");
+  const cleaned = String(text ?? '').replace(QUERY_STOP, ' ');
   return bigrams(cleaned);
 }
 
 /** 内容指纹：忽略标点与空白，用于去重（「；」和「，」不算两条记忆） */
 export function contentKey(text) {
-  return String(text ?? '').normalize('NFKC').toLowerCase().replace(/[^\p{Script=Han}A-Za-z0-9]/gu, '');
+  return String(text ?? '')
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(/[^\p{Script=Han}A-Za-z0-9]/gu, '');
 }
 /** 单字集合：只在 bigram 一条都搜不到时兜底——「修好的」和「修复」共享一个 修 */
 export function unigrams(text) {
-  const s = String(text ?? "").replace(QUERY_STOP, " ");
+  const s = String(text ?? '').replace(QUERY_STOP, ' ');
   const out = new Set();
   for (const run of s.matchAll(/[\p{Script=Han}]+/gu)) for (const ch of run[0]) out.add(ch);
   return [...out];
@@ -223,9 +246,9 @@ export function unigrams(text) {
 
 /** 题档标题：在标点处断开，别把「；」和半个词切进标题 */
 export function makeTitle(aiw, { max = 16 } = {}) {
-  const body = stripTail(String(aiw ?? "")).trim();
-  if (!body) return "";
+  const body = stripTail(String(aiw ?? '')).trim();
+  if (!body) return '';
   const cut = body.split(/[；;，,。.、!！?？]/)[0].trim();
   const base = cut.length >= 4 ? cut : body;
-  return [...base].slice(0, max).join("");
+  return [...base].slice(0, max).join('');
 }

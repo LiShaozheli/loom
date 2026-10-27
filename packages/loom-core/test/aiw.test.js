@@ -15,18 +15,27 @@ test('parseTail 拆成结构化字段', () => {
 });
 
 test('正文校验：一断言、句号在末尾', () => {
-  assert.equal(lintBody('改鉴权→JWT，refresh轮换败，故回滚。').filter((i) => i.level === 'ERROR').length, 0);
+  assert.equal(
+    lintBody('改鉴权→JWT，refresh轮换败，故回滚。').filter((i) => i.level === 'ERROR').length,
+    0
+  );
   assert.ok(lintBody('改鉴权。回滚了。').some((i) => i.code === 'B3'));
 });
 
 test('标题档放宽长度、但仍查禁字', () => {
-  assert.equal(lintBody('预发:8081；上线跑smoke', { tier: 'title' }).filter((i) => i.level === 'ERROR').length, 0);
+  assert.equal(
+    lintBody('预发:8081；上线跑smoke', { tier: 'title' }).filter((i) => i.level === 'ERROR').length,
+    0
+  );
   assert.ok(lintBody('夫天下事有不可为者焉', { tier: 'title' }).some((i) => i.code === 'B2'));
 });
 
 test('作者行校验要求来源', () => {
   assert.ok(lintLine('改鉴权→JWT。@2026-10-24 !').some((i) => i.code === 'M2'));
-  assert.equal(lintLine('改鉴权→JWT。@2026-10-24 #12 !').filter((i) => i.level === 'ERROR').length, 0);
+  assert.equal(
+    lintLine('改鉴权→JWT。@2026-10-24 #12 !').filter((i) => i.level === 'ERROR').length,
+    0
+  );
 });
 
 test('别名：auth 算保住 鉴权', () => {

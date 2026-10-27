@@ -25,7 +25,6 @@ export function attributeCitation(answer, items) {
     .map((it) => it.claimId);
 }
 
-const CJK = /[\p{Script=Han}]/gu;
 const gramsOf = (s) => {
   const chars = [...String(s ?? '').replace(/[^\p{Script=Han}A-Za-z0-9]/gu, '')];
   const out = new Set();
@@ -64,13 +63,18 @@ export function nextWeight(claim, outcome) {
 
   if (used) {
     useCount += 1;
-    if (correct === false) salience *= 0.85;      // 用了但错了：这条在误导
-    else salience *= 1.15;                        // 用了且对（或未知）：加固
+    if (correct === false)
+      salience *= 0.85; // 用了但错了：这条在误导
+    else salience *= 1.15; // 用了且对（或未知）：加固
   } else {
-    salience *= 0.98;                             // 没被用：轻微衰减
+    salience *= 0.98; // 没被用：轻微衰减
   }
 
-  return { salience: clamp(salience, 0.05, 3), useCount, lastUsedAt: used ? now : claim.lastUsedAt };
+  return {
+    salience: clamp(salience, 0.05, 3),
+    useCount,
+    lastUsedAt: used ? now : claim.lastUsedAt,
+  };
 }
 
 /**
@@ -78,7 +82,14 @@ export function nextWeight(claim, outcome) {
  * @param {{answer:string, items:{claimId:string,text:string}[], ledger:{get:Function,touch:Function}, strategy?:string, correct?:boolean|null, now?:number}} input
  */
 export function settleTurn(input) {
-  const { answer, items, ledger, strategy = 'citation+overlap', correct = null, now = Date.now() } = input;
+  const {
+    answer,
+    items,
+    ledger,
+    strategy = 'citation+overlap',
+    correct = null,
+    now = Date.now(),
+  } = input;
 
   const cited = strategy.includes('citation') ? attributeCitation(answer, items) : [];
   const overlapped = strategy.includes('overlap') ? attributeOverlap(answer, items) : [];

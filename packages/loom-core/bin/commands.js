@@ -5,7 +5,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+
 
 import { ingest } from '../src/ingest.js';
 import { allocate } from '../src/allocate.js';
@@ -20,7 +20,6 @@ import { exportToZip, importFromZip } from '../src/bundle.js';
 import { sweep } from '../src/decay.js';
 import { corpusPath, loadCorpus } from '../src/eval-data.js';
 
-const here = path.dirname(fileURLToPath(import.meta.url));
 export { corpusPath, loadCorpus };
 
 /** 与插件一致的默认库路径 */
@@ -45,7 +44,7 @@ function seedLedger(ledger, items, epoch) {
     else {
       const why = r.gate.missing?.length
         ? `缺 ${r.gate.missing.join(',')}`
-        : r.gate.issues.find((i) => i.level === 'ERROR')?.msg ?? r.gate.verdict;
+        : (r.gate.issues.find((i) => i.level === 'ERROR')?.msg ?? r.gate.verdict);
       rejected.push(`${item.id} ${r.gate.verdict}：${why}`);
     }
   }
@@ -63,7 +62,9 @@ export function demo() {
   const { accepted, rejected } = seedLedger(ledger, corpus.items, epoch);
   for (const r of rejected.slice(0, 5)) console.log('   ' + r);
 
-  console.log(`\n① 写入：ACCEPT ${accepted} · 拒绝 ${rejected.length}（共 ${corpus.items.length}）`);
+  console.log(
+    `\n① 写入：ACCEPT ${accepted} · 拒绝 ${rejected.length}（共 ${corpus.items.length}）`
+  );
 
   let fragPass = 0;
   for (const item of corpus.items) {
@@ -110,7 +111,9 @@ export function demo() {
   } catch (e) {
     after = e.message;
   }
-  console.log(`   删除 epoch：事件 ${before} 条 → ${after}；墓碑 ${chronicle.isDestroyed(epoch) ? '已留' : '缺失'}`);
+  console.log(
+    `   删除 epoch：事件 ${before} 条 → ${after}；墓碑 ${chronicle.isDestroyed(epoch) ? '已留' : '缺失'}`
+  );
   console.log(`   链仍可验：${JSON.stringify(chronicle.verify(epoch))}`);
 
   ledger.close();
@@ -174,8 +177,15 @@ export function verify() {
   // 三问：应答短路 + 提问命中
   const skip = recall({ query: '好的', claims: ledger.active() });
   ok('三问：应答短路', skip.skipped === true);
-  const hit = recall({ query: '上次 JWT 那个方案为什么回滚？', claims: ledger.active(), budget: 200 });
-  ok('三问：提问命中鉴权条目', hit.items.some((i) => (i.text || '').includes('JWT')));
+  const hit = recall({
+    query: '上次 JWT 那个方案为什么回滚？',
+    claims: ledger.active(),
+    budget: 200,
+  });
+  ok(
+    '三问：提问命中鉴权条目',
+    hit.items.some((i) => (i.text || '').includes('JWT'))
+  );
 
   // Settle：被引用的条目涨权，没被引用的降权
   const target = ledger.active().find((c) => c.aiw.includes('JWT'));
@@ -191,7 +201,8 @@ export function verify() {
   ledger.close();
   fs.rmSync(dir, { recursive: true, force: true });
 
-  for (const c of checks) console.log(`  ${c.pass ? 'PASS' : 'FAIL'}  ${c.name}${c.extra ? '  ' + c.extra : ''}`);
+  for (const c of checks)
+    console.log(`  ${c.pass ? 'PASS' : 'FAIL'}  ${c.name}${c.extra ? '  ' + c.extra : ''}`);
   const failed = checks.filter((c) => !c.pass).length;
   console.log(`\nverify: ${checks.length - failed}/${checks.length} 通过`);
   process.exit(failed ? 1 : 0);
@@ -206,12 +217,17 @@ export function recallCmd(query) {
   const r = recall({ query, search: (q) => ledger.search(q, { limit: 50 }), budget: 200 });
   console.log(`\n问题：${query}`);
   console.log(`① 要不要查：${r.admission.recall ? '查' : '不查'}（${r.admission.reason}）`);
-  if (r.skipped) { ledger.close(); return; }
+  if (r.skipped) {
+    ledger.close();
+    return;
+  }
 
   console.log(`② 查哪类：${r.route.reason}`);
   console.log(`③ 取多少：目录 ${r.outline.nodes.length} 个节点 / ${r.outline.usedTokens} token`);
   for (const n of r.outline.nodes) console.log(`   ${n.title}　子树 ${n.tokens.subtree} token`);
-  console.log(`   取回 ${r.items.length} 条正文 + ${r.pointers.length} 条指针 · 用掉 ${r.usedTokens}/200`);
+  console.log(
+    `   取回 ${r.items.length} 条正文 + ${r.pointers.length} 条指针 · 用掉 ${r.usedTokens}/200`
+  );
   for (const it of r.items) console.log(`   [${it.level}] ${it.claimId.slice(0, 8)} ${it.text}`);
   for (const p of r.pointers) console.log(`   [ptr] ${p.title}`);
   ledger.close();
@@ -256,7 +272,9 @@ export function decayCmd(apply) {
   const db = new SqliteLedger(liveDbPath());
   const r = sweep(db, { apply });
   for (const row of r.rows.slice(0, 20)) {
-    console.log(`  ${row.action.padEnd(10)} ${row.id.slice(0, 8)} ${row.kind.padEnd(9)} score=${row.score} ${row.title}`);
+    console.log(
+      `  ${row.action.padEnd(10)} ${row.id.slice(0, 8)} ${row.kind.padEnd(9)} score=${row.score} ${row.title}`
+    );
   }
   console.log(`\n${apply ? '已执行' : '预览'}：${JSON.stringify(r.counts)}`);
   db.close();
@@ -266,7 +284,9 @@ export function decayCmd(apply) {
 export function epochsCmd() {
   const chron = new Chronicle(path.join(path.dirname(liveDbPath()), 'chronicle'));
   for (const e of chron.epochs()) {
-    console.log(`  ${e.id.padEnd(16)} ${e.destroyed ? '已销毁' : '在'} ${new Date(e.createdAt).toISOString().slice(0, 10)}${e.reason ? '  ' + e.reason : ''}`);
+    console.log(
+      `  ${e.id.padEnd(16)} ${e.destroyed ? '已销毁' : '在'} ${new Date(e.createdAt).toISOString().slice(0, 10)}${e.reason ? '  ' + e.reason : ''}`
+    );
   }
 }
 
@@ -306,7 +326,10 @@ export function docRevsCmd(keyword) {
   for (const d of docs) {
     const revs = db.docRevisions(d.id);
     console.log(`${d.title}（${d.id}）· ${revs.length} 版`);
-    for (const r of revs) console.log(`  v${r.rev} ${new Date(r.at).toISOString().slice(0, 16)} ${r.body.slice(0, 40)}`);
+    for (const r of revs)
+      console.log(
+        `  v${r.rev} ${new Date(r.at).toISOString().slice(0, 16)} ${r.body.slice(0, 40)}`
+      );
   }
   if (!docs.length) console.log('没有匹配的文档');
   db.close();

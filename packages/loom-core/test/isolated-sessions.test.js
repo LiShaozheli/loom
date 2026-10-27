@@ -69,7 +69,13 @@ function sink() {
 
 function postReq(obj) {
   const payload = Buffer.from(JSON.stringify(obj));
-  return { method: 'POST', url: '/', [Symbol.asyncIterator]: async function* () { yield payload; } };
+  return {
+    method: 'POST',
+    url: '/',
+    [Symbol.asyncIterator]: async function* () {
+      yield payload;
+    },
+  };
 }
 
 function getReq(url) {
@@ -117,21 +123,38 @@ test('/loom/sessions 用宿主的会话列表和标题', async () => {
       return [
         { header: { id: 'sess-A', createdAt: 100 }, live: true, persisted: true },
         { header: { id: 'sess-B', createdAt: 200 }, live: false, persisted: true },
-        { header: { id: 'sub-1', createdAt: 300, parentSession: 'sess-A', origin: 'subagent' }, live: false, persisted: true },
+        {
+          header: { id: 'sub-1', createdAt: 300, parentSession: 'sess-A', origin: 'subagent' },
+          live: false,
+          persisted: true,
+        },
       ];
     },
     async readTitleSnapshots(ids) {
       return ids.map((id) => ({
         sessionId: id,
         status: 'fulfilled',
-        value: { session: { id }, title: { title: '标题-' + id, eventSeq: 1, updatedAt: 1, messageSeqs: [], source: { kind: 'user' } } },
+        value: {
+          session: { id },
+          title: {
+            title: '标题-' + id,
+            eventSeq: 1,
+            updatedAt: 1,
+            messageSeqs: [],
+            source: { kind: 'user' },
+          },
+        },
       }));
     },
   };
   const { routes, call, emit, done } = boot({ isolatedSessions: ['sess-B'] }, { sessionQuery });
   await call('memory_write', { line: '来自 A 的一条。', kind: 'fact' }, 'sess-A');
   // 归档计数只来自 session/event：发一条真实的用户消息，sess-A 才该数出 1 条
-  emit('session/event', { id: 'sess-A' }, { type: 'user/message', data: { content: '来自 A 的一条。' } });
+  emit(
+    'session/event',
+    { id: 'sess-A' },
+    { type: 'user/message', data: { content: '来自 A 的一条。' } }
+  );
 
   const { got, res } = sink();
   await routes.get('/loom/sessions').handler(getReq('/loom/sessions'), res);
@@ -197,7 +220,11 @@ test('/loom/isolate 不会把已有的名单冲掉', async () => {
   const { got, res } = sink();
   await routes.get('/loom/isolate').handler(postReq({ id: 'new-2', isolated: true }), res);
   assert.equal(got.status, 200, got.body);
-  assert.deepEqual(store.isolatedSessions.sort(), ['new-2', 'old-1'], '要在现有数组上增删，不是覆盖');
+  assert.deepEqual(
+    store.isolatedSessions.sort(),
+    ['new-2', 'old-1'],
+    '要在现有数组上增删，不是覆盖'
+  );
   done();
 });
 
@@ -212,7 +239,9 @@ test('/loom/isolate 拒绝空 id，也不在没有 configEditor 时静默成功'
 
   const bare = boot();
   ({ got, res } = sink());
-  await bare.routes.get('/loom/isolate').handler(postReq({ id: 'x', isolated: true }), bare.res ? bare.res : res);
+  await bare.routes
+    .get('/loom/isolate')
+    .handler(postReq({ id: 'x', isolated: true }), bare.res ? bare.res : res);
   assert.equal(got.status, 503, '没有 configEditor 必须明确报错，不能假装成功');
   bare.done();
 });

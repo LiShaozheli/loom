@@ -7,7 +7,8 @@
  * 判据只用规则和小信号，不调模型：这一问必须比省下的那点工作在量级上更便宜。
  */
 
-const ACK = /^(好|好的|行|可以|嗯+|哦|收到|谢谢|多谢|ok|okay|继续|下一步|开始吧|没问题)[。！!.~]*$/i;
+const ACK =
+  /^(好|好的|行|可以|嗯+|哦|收到|谢谢|多谢|ok|okay|继续|下一步|开始吧|没问题)[。！!.~]*$/i;
 const GREET = /^(你好|hi|hello|在吗|早上好|晚上好)[。！!~]*$/i;
 const CUE = /之前|上次|上回|当时|我们说|我说过|记得|那个方案|那时候|以前|前面提过/;
 const QUESTION = /[?？]|什么|怎么|为什么|哪|谁|多少|是不是|能不能|有没有|如何/;
@@ -35,7 +36,8 @@ export function shouldRecall(query, ctx = {}) {
 
   // 提问 → 查；纯命令且无线索 → 不查（命令通常自带上下文）
   if (QUESTION.test(q)) return { recall: true, reason: 'question', confidence: 'medium' };
-  if (IMPERATIVE.test(q)) return { recall: false, reason: 'imperative-no-cue', confidence: 'medium' };
+  if (IMPERATIVE.test(q))
+    return { recall: false, reason: 'imperative-no-cue', confidence: 'medium' };
 
   // 其余默认查：真实用户最常见的查询就是「预发端口」这种名词短语，
   // 按长度一刀切会把它们全部漏掉（2026-10-26 实测踩到过）。

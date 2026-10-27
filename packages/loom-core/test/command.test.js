@@ -5,9 +5,19 @@ import { runLoomCommand } from '../src/command.js';
 
 const seed = (db, id, kind, aiw) =>
   db.put({
-    id, kind, body: aiw, aiw, title: aiw.slice(0, 8),
-    confidence: 'high', source: { eventId: 'e' }, epochId: 'ep', taint: 'none',
-    validFrom: 1, salience: 1, useCount: 0, cold: false,
+    id,
+    kind,
+    body: aiw,
+    aiw,
+    title: aiw.slice(0, 8),
+    confidence: 'high',
+    source: { eventId: 'e' },
+    epochId: 'ep',
+    taint: 'none',
+    validFrom: 1,
+    salience: 1,
+    useCount: 0,
+    cold: false,
   });
 
 const mk = () => {
@@ -58,7 +68,10 @@ test('/loom search 无参报错', () => {
 
 test('/loom verify 反映链状态', () => {
   const db = mk();
-  const r = runLoomCommand('verify', { ledger: db, verify: () => ({ ok: true, epochs: 1, events: 9, current: 'ep-x' }) });
+  const r = runLoomCommand('verify', {
+    ledger: db,
+    verify: () => ({ ok: true, epochs: 1, events: 9, current: 'ep-x' }),
+  });
   assert.equal(r.kind, 'success');
   assert.ok(r.text.includes('完好'));
   assert.ok(r.text.includes('ep-x'));
@@ -67,7 +80,10 @@ test('/loom verify 反映链状态', () => {
 
 test('/loom hot 展示注入内容', () => {
   const db = mk();
-  const r = runLoomCommand('hot', { ledger: db, hot: () => ({ text: '## LOOM 记忆\n- x', bytes: 20, counts: {} }) });
+  const r = runLoomCommand('hot', {
+    ledger: db,
+    hot: () => ({ text: '## LOOM 记忆\n- x', bytes: 20, counts: {} }),
+  });
   assert.ok(r.text.includes('本轮注入'));
   db.close();
 });

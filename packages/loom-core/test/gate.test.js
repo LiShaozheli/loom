@@ -22,7 +22,11 @@ test('完整的 AI文 通过闸门', () => {
 
 test('丢了关键事实 → REJECT', () => {
   const r = gate(
-    { aiw: '路径拼接导致配置读取失败，已修复。', confidence: 'medium', source: { eventId: 'evt-2' } },
+    {
+      aiw: '路径拼接导致配置读取失败，已修复。',
+      confidence: 'medium',
+      source: { eventId: 'evt-2' },
+    },
     { original, mustKeep: ['ENOENT', 'path.join', '打包'] }
   );
   assert.equal(r.verdict, 'REJECT');
@@ -41,7 +45,11 @@ test('缺来源 → REJECT（哪怕正文很好）', () => {
 
 test('无人工 must_keep 时用规则版兜底', () => {
   const good = gate(
-    { aiw: 'Win路径拼正斜杠→配置读败（ENOENT）；修=path.join。', confidence: 'high', source: { eventId: 'e' } },
+    {
+      aiw: 'Win路径拼正斜杠→配置读败（ENOENT）；修=path.join。',
+      confidence: 'high',
+      source: { eventId: 'e' },
+    },
     { original }
   );
   assert.equal(good.verdict, 'ACCEPT');
@@ -68,7 +76,19 @@ test('编造的标识符 → REVISE', () => {
 
 test('ledger：幂等写入 + 冲突不覆盖', () => {
   const led = new MemoryLedger();
-  const c = { id: 'a', kind: 'fact', body: 'b', aiw: 'x', title: 't', confidence: 'high', source: { eventId: 'e' }, epochId: 'ep', taint: 'none', validFrom: 1, salience: 1 };
+  const c = {
+    id: 'a',
+    kind: 'fact',
+    body: 'b',
+    aiw: 'x',
+    title: 't',
+    confidence: 'high',
+    source: { eventId: 'e' },
+    epochId: 'ep',
+    taint: 'none',
+    validFrom: 1,
+    salience: 1,
+  };
   led.put(c);
   led.put({ ...c, body: 'changed' });
   assert.equal(led.get('a').body, 'b', '同 id 不覆盖');

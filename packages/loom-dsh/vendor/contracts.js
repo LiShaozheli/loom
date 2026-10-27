@@ -58,7 +58,16 @@
  */
 
 export const CONTRACTS_VERSION = 'loom/v0';
-export const CLAIM_KINDS = ['fact', 'pref', 'rule', 'proc', 'relation', 'open', 'decision', 'opinion'];
+export const CLAIM_KINDS = [
+  'fact',
+  'pref',
+  'rule',
+  'proc',
+  'relation',
+  'open',
+  'decision',
+  'opinion',
+];
 export const TIERS = ['title', 'lite', 'full'];
 
 /** 默认计数器：与宿主同口径，方便对照 */

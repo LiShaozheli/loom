@@ -47,9 +47,18 @@ test('权重有上下界，不会涨到无穷或掉到 0', () => {
 test('settleTurn：把结果写回账本', () => {
   const led = new MemoryLedger();
   led.put({
-    id: 'aaaa1111', kind: 'fact', body: 'b', aiw: items[0].text, title: 't',
-    confidence: 'high', source: { eventId: 'e' }, epochId: 'ep', taint: 'none',
-    validFrom: 1, salience: 1, useCount: 0,
+    id: 'aaaa1111',
+    kind: 'fact',
+    body: 'b',
+    aiw: items[0].text,
+    title: 't',
+    confidence: 'high',
+    source: { eventId: 'e' },
+    epochId: 'ep',
+    taint: 'none',
+    validFrom: 1,
+    salience: 1,
+    useCount: 0,
   });
   led.touch = (id, patch) => {
     const c = led.get(id);
@@ -66,9 +75,18 @@ test('settleTurn：没被用到的条目不涨权重', () => {
   const led = new MemoryLedger();
   for (const it of items) {
     led.put({
-      id: it.claimId, kind: 'fact', body: 'b', aiw: it.text, title: 't',
-      confidence: 'high', source: { eventId: 'e' }, epochId: 'ep', taint: 'none',
-      validFrom: 1, salience: 1, useCount: 0,
+      id: it.claimId,
+      kind: 'fact',
+      body: 'b',
+      aiw: it.text,
+      title: 't',
+      confidence: 'high',
+      source: { eventId: 'e' },
+      epochId: 'ep',
+      taint: 'none',
+      validFrom: 1,
+      salience: 1,
+      useCount: 0,
     });
   }
   led.touch = (id, patch) => Object.assign(led.get(id), patch);

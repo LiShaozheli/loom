@@ -54,7 +54,11 @@ const unwrap = (master, payload) => Buffer.from(open(master, payload), 'base64')
 
 /** 同步小睡：锁等待用，不能 await（这层全是同步 API） */
 const sleepSync = (ms) => {
-  try { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); } catch { /* 主线程不支持就忙等 */ }
+  try {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+  } catch {
+    /* 主线程不支持就忙等 */
+  }
 };
 
 /** 两个 head 取「更靠后」的那个：seq 大的赢，持平取磁盘那份 */
@@ -112,7 +116,8 @@ export class Chronicle {
   #refreshMeta() {
     const st = this.#statMeta();
     if (!st) return false;
-    if (this.metaStat && st.mtimeMs === this.metaStat.mtimeMs && st.size === this.metaStat.size) return false;
+    if (this.metaStat && st.mtimeMs === this.metaStat.mtimeMs && st.size === this.metaStat.size)
+      return false;
     this.meta = this.#readMeta();
     this.metaStat = st;
     return true;
@@ -164,8 +169,14 @@ export class Chronicle {
       if (destroyed.has(id)) continue; // 已销毁：任何一方都别想写回来
       const a = disk.epochs[id];
       const b = this.meta.epochs[id];
-      if (!a) { epochs[id] = b; continue; }
-      if (!b) { epochs[id] = a; continue; }
+      if (!a) {
+        epochs[id] = b;
+        continue;
+      }
+      if (!b) {
+        epochs[id] = a;
+        continue;
+      }
       epochs[id] = {
         ...b,
         ...a,
@@ -210,7 +221,10 @@ export class Chronicle {
       try {
         const logPath = this.#logPath(id);
         const size = fs.existsSync(logPath) ? fs.statSync(logPath).size : 0;
-        if (size === 0) { rec.head = { seq: 0, hash: 'GENESIS', size: 0 }; continue; }
+        if (size === 0) {
+          rec.head = { seq: 0, hash: 'GENESIS', size: 0 };
+          continue;
+        }
         const last = this.#lastRecord(logPath, size);
         rec.head = { seq: (last.seq ?? 0) + 1, hash: last.hash, size };
       } catch {
@@ -218,7 +232,11 @@ export class Chronicle {
       }
     }
     this.meta.version = META_VERSION;
-    try { this.#save(); } catch { /* 迁移失败不阻塞启动 */ }
+    try {
+      this.#save();
+    } catch {
+      /* 迁移失败不阻塞启动 */
+    }
   }
 
   #loadMaster() {
@@ -257,7 +275,9 @@ export class Chronicle {
    */
   currentEpoch({ everyDays = 7, now = Date.now(), prefix = 'ep' } = {}) {
     this.#refreshMeta();
-    const newest = Object.entries(this.meta.epochs).sort((a, b) => b[1].createdAt - a[1].createdAt)[0];
+    const newest = Object.entries(this.meta.epochs).sort(
+      (a, b) => b[1].createdAt - a[1].createdAt
+    )[0];
     if (newest && now - newest[1].createdAt < everyDays * 86_400_000) return newest[0];
 
     const d = new Date(now);
@@ -273,7 +293,14 @@ export class Chronicle {
     this.#refreshMeta();
     return Object.entries(this.meta.epochs)
       .map(([id, rec]) => ({ id, createdAt: rec.createdAt, destroyed: false }))
-      .concat(this.meta.tombstones.map((t) => ({ id: t.epochId, createdAt: t.at, destroyed: true, reason: t.reason })))
+      .concat(
+        this.meta.tombstones.map((t) => ({
+          id: t.epochId,
+          createdAt: t.at,
+          destroyed: true,
+          reason: t.reason,
+        }))
+      )
       .sort((a, b) => a.createdAt - b.createdAt);
   }
 
@@ -294,17 +321,33 @@ export class Chronicle {
     for (;;) {
       try {
         const fd = fs.openSync(lockPath, 'wx');
-        try { fs.writeSync(fd, `${process.pid} ${Date.now()}`); } finally { fs.closeSync(fd); }
+        try {
+          fs.writeSync(fd, `${process.pid} ${Date.now()}`);
+        } finally {
+          fs.closeSync(fd);
+        }
         return {
-          release: () => { try { fs.unlinkSync(lockPath); } catch { /* 已被夺走 */ } },
+          release: () => {
+            try {
+              fs.unlinkSync(lockPath);
+            } catch {
+              /* 已被夺走 */
+            }
+          },
         };
       } catch (e) {
         if (e?.code !== 'EEXIST') throw e;
         try {
           const st = fs.statSync(lockPath);
-          if (Date.now() - st.mtimeMs > LOCK_STALE_MS) { fs.unlinkSync(lockPath); continue; }
-        } catch { /* 锁刚被释放，重试即可 */ }
-        if (Date.now() > deadline) throw new Error(`写入 ${epochId} 超时：另一个进程持有锁（${lockPath}）`);
+          if (Date.now() - st.mtimeMs > LOCK_STALE_MS) {
+            fs.unlinkSync(lockPath);
+            continue;
+          }
+        } catch {
+          /* 锁刚被释放，重试即可 */
+        }
+        if (Date.now() > deadline)
+          throw new Error(`写入 ${epochId} 超时：另一个进程持有锁（${lockPath}）`);
         sleepSync(5);
       }
     }
@@ -318,7 +361,11 @@ export class Chronicle {
       const len = size - start;
       const buf = Buffer.alloc(len);
       const fd = fs.openSync(logPath, 'r');
-      try { fs.readSync(fd, buf, 0, len, start); } finally { fs.closeSync(fd); }
+      try {
+        fs.readSync(fd, buf, 0, len, start);
+      } finally {
+        fs.closeSync(fd);
+      }
       const text = buf.toString('utf8');
       const lines = text.split('\n').filter(Boolean);
       // 从文件中间开始时第一条可能是半行，丢掉
@@ -332,7 +379,11 @@ export class Chronicle {
   /** 当前 head：内存命中 O(1)；文件大小变了才读尾部 */
   #head(epochId, logPath) {
     let size = 0;
-    try { size = fs.statSync(logPath).size; } catch { size = 0; }
+    try {
+      size = fs.statSync(logPath).size;
+    } catch {
+      size = 0;
+    }
     const cached = this.heads.get(epochId);
     if (cached && cached.size === size) return cached;
 
@@ -377,7 +428,12 @@ export class Chronicle {
       } finally {
         fs.closeSync(fd);
       }
-      this.heads.set(epochId, { size: head.size + bytes, seq: head.seq + 1, hash: record.hash, kinds });
+      this.heads.set(epochId, {
+        size: head.size + bytes,
+        seq: head.seq + 1,
+        hash: record.hash,
+        kinds,
+      });
       out = { hash: record.hash, prevHash: head.hash, seq: head.seq };
     } finally {
       lock.release();
@@ -400,7 +456,11 @@ export class Chronicle {
     });
     const lastRec = lines.length ? JSON.parse(lines[lines.length - 1]) : null;
     let size = 0;
-    try { size = fs.statSync(logPath).size; } catch { /* 刚被删 */ }
+    try {
+      size = fs.statSync(logPath).size;
+    } catch {
+      /* 刚被删 */
+    }
     // 顺手把分类计数纠正一遍：这是唯一一次「全量已知」，之后靠 append 自增
     const kinds = {};
     for (const r of out) {
@@ -445,7 +505,11 @@ export class Chronicle {
       const len = size - start;
       const buf = Buffer.alloc(len);
       const fd = fs.openSync(logPath, 'r');
-      try { fs.readSync(fd, buf, 0, len, start); } finally { fs.closeSync(fd); }
+      try {
+        fs.readSync(fd, buf, 0, len, start);
+      } finally {
+        fs.closeSync(fd);
+      }
       const lines = buf.toString('utf8').split('\n').filter(Boolean);
       const usable = start === 0 ? lines : lines.slice(1); // 从中间开始的第一行是半行
       if (usable.length >= want || start === 0) {
@@ -493,7 +557,11 @@ export class Chronicle {
     const logPath = this.#logPath(epochId);
 
     let size = 0;
-    try { size = fs.statSync(logPath).size; } catch { size = 0; }
+    try {
+      size = fs.statSync(logPath).size;
+    } catch {
+      size = 0;
+    }
     if (size === 0) {
       if (anchored && anchored.seq > 0) {
         return { ok: false, reason: `日志文件缺失（锚点记录 ${anchored.seq} 条）` };
@@ -511,13 +579,22 @@ export class Chronicle {
       const len = size - verified.size;
       const buf = Buffer.alloc(len);
       const fd = fs.openSync(logPath, 'r');
-      try { fs.readSync(fd, buf, 0, len, verified.size); } finally { fs.closeSync(fd); }
+      try {
+        fs.readSync(fd, buf, 0, len, verified.size);
+      } finally {
+        fs.closeSync(fd);
+      }
       const lines = buf.toString('utf8').split('\n').filter(Boolean);
-      for (const [i, line] of lines.entries()) {
+      for (const line of lines) {
         let r;
-        try { r = JSON.parse(line); } catch { return { ok: false, at: seq, reason: '末尾记录不完整' }; }
+        try {
+          r = JSON.parse(line);
+        } catch {
+          return { ok: false, at: seq, reason: '末尾记录不完整' };
+        }
         const { hash, ...rest } = r;
-        if (sha256(JSON.stringify(rest)) !== hash) return { ok: false, at: seq, reason: 'hash mismatch' };
+        if (sha256(JSON.stringify(rest)) !== hash)
+          return { ok: false, at: seq, reason: 'hash mismatch' };
         if (r.prevHash !== prev) return { ok: false, at: seq, reason: 'chain broken' };
         prev = hash;
         seq++;
@@ -534,7 +611,11 @@ export class Chronicle {
     // 记下「已验证到哪个字节」，下次只用校验增量
     if (!verified || verified.seq !== seq || verified.size !== size) {
       rec.verified = { seq, hash: prev, size };
-      try { this.#save({ anchorOnly: true }); } catch { /* 写不进就下次再算 */ }
+      try {
+        this.#save({ anchorOnly: true });
+      } catch {
+        /* 写不进就下次再算 */
+      }
     }
     return { ok: true, count: seq };
   }
@@ -555,7 +636,8 @@ export class Chronicle {
     for (const [i, line] of lines.entries()) {
       const rec = JSON.parse(line);
       const { hash, ...rest } = rec;
-      if (sha256(JSON.stringify(rest)) !== hash) return { ok: false, at: i, reason: 'hash mismatch' };
+      if (sha256(JSON.stringify(rest)) !== hash)
+        return { ok: false, at: i, reason: 'hash mismatch' };
       if (rec.prevHash !== prev) return { ok: false, at: i, reason: 'chain broken' };
       prev = hash;
     }
@@ -569,9 +651,17 @@ export class Chronicle {
     const rec = this.meta.epochs[epochId];
     if (rec) {
       let size = 0;
-      try { size = fs.statSync(logPath).size; } catch { /* 刚被删 */ }
+      try {
+        size = fs.statSync(logPath).size;
+      } catch {
+        /* 刚被删 */
+      }
       rec.verified = { seq: lines.length, hash: prev, size };
-      try { this.#save({ anchorOnly: true }); } catch { /* 不影响验链结论 */ }
+      try {
+        this.#save({ anchorOnly: true });
+      } catch {
+        /* 不影响验链结论 */
+      }
     }
     return { ok: true, count: lines.length };
   }

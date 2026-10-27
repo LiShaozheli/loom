@@ -66,9 +66,7 @@ export function buildHotMemory(claims, opts = {}) {
     fact: picked.length - picked.filter(isRule).length - picked.filter(isPref).length,
   };
 
-  const hidden = omitted
-    ? `\n（另有 ${omitted} 条未展开，需要时用 memory_recall 取）`
-    : '';
+  const hidden = omitted ? `\n（另有 ${omitted} 条未展开，需要时用 memory_recall 取）` : '';
 
   const text = `## LOOM 记忆（本轮自动注入）\n${lines.join('\n')}${hidden}`;
   return { text, counts, bytes: bytesOf(text), omitted, tainted };

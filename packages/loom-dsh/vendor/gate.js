@@ -21,8 +21,10 @@ export function gate(draft, opts = {}) {
   issues.push(...bodyIssues);
 
   // 2) 元数据（尾部不进正文，但必须存在）
-  if (!draft.source?.eventId) issues.push({ level: 'ERROR', code: 'M1', msg: '缺 source.eventId，无法回源' });
-  if (!draft.confidence) issues.push({ level: 'ERROR', code: 'M2', msg: '缺 confidence（原 ! ? ~）' });
+  if (!draft.source?.eventId)
+    issues.push({ level: 'ERROR', code: 'M1', msg: '缺 source.eventId，无法回源' });
+  if (!draft.confidence)
+    issues.push({ level: 'ERROR', code: 'M2', msg: '缺 confidence（原 ! ? ~）' });
 
   // 3) 保真：人工 must_keep 优先，否则用规则版兜底
   let terms = Array.isArray(mustKeep) && mustKeep.length ? mustKeep.slice() : null;

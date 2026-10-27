@@ -10,13 +10,16 @@
  *   排除     疑问句、纯指令（帮我改…）、太短、太长、纯寒暄
  */
 
-const STRONG = /记住|记一下|记下|以后都|以后要|以后别|以后不|约定|我们说好|必须|禁止|一律|不要用|决定用|默认用/;
+const STRONG =
+  /记住|记一下|记下|以后都|以后要|以后别|以后不|约定|我们说好|必须|禁止|一律|不要用|决定用|默认用/;
 // strict：只认标识符与参数（旧行为）
 const WEAK_STRICT = /端口|路径|版本|地址|密码|账号|用\s?[A-Za-z]|改成|换成|固定在|定在|配置/;
 // normal：把"关于项目和偏好"的第一人称陈述也算进来——漏记比脏记更让人失望
-const WEAK_NORMAL = /喜欢|不喜欢|习惯|偏好|希望|讨厌|受不了|一般|通常|总是|从不|这个项目|本项目|我们|我这边|我的|团队|规范|约定|风格/;
+const WEAK_NORMAL =
+  /喜欢|不喜欢|习惯|偏好|希望|讨厌|受不了|一般|通常|总是|从不|这个项目|本项目|我们|我这边|我的|团队|规范|约定|风格/;
 const QUESTION = /[?？]|吗|呢|怎么|如何|为什么|是不是|能不能|有没有|对不对|行不行|好不好|咋回事/;
-const PURE_TASK = /^(帮|请|把|改|写|实现|修复|跑|执行|加|删|部署|提交|重跑|生成|整理|格式化|看看|检查)/;
+const PURE_TASK =
+  /^(帮|请|把|改|写|实现|修复|跑|执行|加|删|部署|提交|重跑|生成|整理|格式化|看看|检查)/;
 const AFFIRM = /^(好|行|可以|嗯|收到|谢谢|继续|ok)[。！!.~]*$/i;
 
 const KIND_HINT = [
@@ -78,7 +81,8 @@ export function pickDurable(text, { level = 'normal' } = {}) {
   const strong = STRONG.test(head) || (STRONG.test(raw) && raw.length <= 60);
   if (!strong) {
     if (QUESTION.test(raw)) return { capture: false, kind: 'fact', reason: 'question', text: raw };
-    if (PURE_TASK.test(raw)) return { capture: false, kind: 'fact', reason: 'pure-task', text: raw };
+    if (PURE_TASK.test(raw))
+      return { capture: false, kind: 'fact', reason: 'pure-task', text: raw };
     const weak = WEAK_STRICT.test(raw) || (level !== 'strict' && WEAK_NORMAL.test(raw));
     if (!weak) return { capture: false, kind: 'fact', reason: 'no-signal', text: raw };
   }

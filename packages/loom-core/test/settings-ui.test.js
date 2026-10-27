@@ -17,7 +17,11 @@ test('设置页用点击式控件，不再要求手打枚举值', () => {
   assert.ok(client.includes('h(Toggle'), '应有 Toggle 控件');
   // 枚举不该再是一个裸输入框让人手填 session/global
   const settingsBlock = client.slice(client.indexOf("if (tab === '设置')"));
-  assert.equal(/value: draft\.memoryScope/.test(settingsBlock), false, 'memoryScope 不该是文本输入');
+  assert.equal(
+    /value: draft\.memoryScope/.test(settingsBlock),
+    false,
+    'memoryScope 不该是文本输入'
+  );
 });
 
 test('分组标题齐全', () => {

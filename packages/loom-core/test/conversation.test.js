@@ -66,10 +66,27 @@ test('会话自测：14 轮真实用法', async (t) => {
   try {
     await t.test('0. 十六个工具都在，且注册了两段 prompt', () => {
       assert.deepEqual(names.sort(), [
-        'memory_archive_search', 'memory_decay', 'memory_diag', 'memory_doc_search', 'memory_doc_write', 'memory_forget', 'memory_hot', 'memory_link', 'memory_note',
-        'memory_outline', 'memory_recall', 'memory_related', 'memory_settle', 'memory_stats', 'memory_verify', 'memory_write',
+        'memory_archive_search',
+        'memory_decay',
+        'memory_diag',
+        'memory_doc_search',
+        'memory_doc_write',
+        'memory_forget',
+        'memory_hot',
+        'memory_link',
+        'memory_note',
+        'memory_outline',
+        'memory_recall',
+        'memory_related',
+        'memory_settle',
+        'memory_stats',
+        'memory_verify',
+        'memory_write',
       ]);
-      assert.deepEqual(sections.map((x) => x.name).sort(), ['loom-hot-memory', 'loom-memory-protocol']);
+      assert.deepEqual(sections.map((x) => x.name).sort(), [
+        'loom-hot-memory',
+        'loom-memory-protocol',
+      ]);
     });
 
     await t.test('1. 写一条：汉字置信 + 无尾也接受', async () => {
@@ -157,7 +174,10 @@ test('会话自测：14 轮真实用法', async (t) => {
     });
 
     await t.test('12. 结算：被引用的条目涨权', async () => {
-      const w = await call('memory_write', { line: '结算测试条目：发布前跑 smoke。', kind: 'proc' });
+      const w = await call('memory_write', {
+        line: '结算测试条目：发布前跑 smoke。',
+        kind: 'proc',
+      });
       const r = await call('memory_settle', { used: [w.id.slice(0, 8)], correct: true });
       assert.equal(r.ok, true);
       assert.equal(r.used.length, 1);
@@ -182,8 +202,19 @@ test('会话自测：14 轮真实用法', async (t) => {
       const emit = listeners.get('session/event');
       assert.equal(typeof emit, 'function', '应注册 session/event 监听器');
       const before = (await call('memory_verify', {})).events;
-      emit({}, { type: 'user/message', data: { role: 'user', content: '嗯' }, seq: 1, time: Date.now() });
-      emit({}, { type: 'assistant/message', data: { message: { role: 'assistant', content: [{ type: 'text', text: '我在' }] } }, seq: 2, time: Date.now() });
+      emit(
+        {},
+        { type: 'user/message', data: { role: 'user', content: '嗯' }, seq: 1, time: Date.now() }
+      );
+      emit(
+        {},
+        {
+          type: 'assistant/message',
+          data: { message: { role: 'assistant', content: [{ type: 'text', text: '我在' }] } },
+          seq: 2,
+          time: Date.now(),
+        }
+      );
       const after = (await call('memory_verify', {})).events;
       assert.equal(after, before + 2, '两条都应进编年层');
       const hit = await call('memory_archive_search', { query: '我在' });
@@ -203,7 +234,10 @@ test('会话自测：14 轮真实用法', async (t) => {
     });
 
     await t.test('15c. 遗忘：一起写下的文档也要失活', async () => {
-      const n = await call('memory_note', { text: '记住：这个仓库用 vitest 跑单测。', kind: 'pref' });
+      const n = await call('memory_note', {
+        text: '记住：这个仓库用 vitest 跑单测。',
+        kind: 'pref',
+      });
       assert.equal(n.ok, true);
       const before = await call('memory_doc_search', { query: 'vitest' });
       assert.ok(before.total >= 1, '写入后应能搜到文档');
@@ -225,7 +259,10 @@ test('会话自测：14 轮真实用法', async (t) => {
       });
       assert.equal(w.ok, true);
       const s2 = await call('memory_doc_search', { query: '灰度' });
-      assert.ok(s2.hits.some((h) => h.title === '发布流程'), JSON.stringify(s2));
+      assert.ok(
+        s2.hits.some((h) => h.title === '发布流程'),
+        JSON.stringify(s2)
+      );
     });
 
     await t.test('17. 原样捕获：长文也留得住，只是不进 claim', async () => {
@@ -243,7 +280,11 @@ test('会话自测：14 轮真实用法', async (t) => {
     await t.test('18. 关系边：连上之后能顺着走', async () => {
       const a = await call('memory_write', { line: '缓存层选型未定；先按 LRU 做。', kind: 'open' });
       const b = await call('memory_write', { line: '压测发现 Redis 延迟抖动。', kind: 'fact' });
-      const l = await call('memory_link', { from: a.id.slice(0, 8), to: b.id.slice(0, 8), type: 'causal' });
+      const l = await call('memory_link', {
+        from: a.id.slice(0, 8),
+        to: b.id.slice(0, 8),
+        type: 'causal',
+      });
       assert.equal(l.ok, true);
       const r = await call('memory_related', { id: a.id.slice(0, 8), depth: 1 });
       assert.equal(r.found, 1);

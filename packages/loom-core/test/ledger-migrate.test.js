@@ -23,14 +23,22 @@ function legacyDb(file) {
       last_used_at INTEGER, cold INTEGER NOT NULL DEFAULT 0
     );
   `);
-  db.prepare(
-    'INSERT INTO claim (id,kind,body,aiw,epoch_id,valid_from) VALUES (?,?,?,?,?,?)'
-  ).run('old-1', 'fact', '旧库里的记忆', '旧库里的记忆', 'ep-1', 1);
+  db.prepare('INSERT INTO claim (id,kind,body,aiw,epoch_id,valid_from) VALUES (?,?,?,?,?,?)').run(
+    'old-1',
+    'fact',
+    '旧库里的记忆',
+    '旧库里的记忆',
+    'ep-1',
+    1
+  );
   db.close();
 }
 
 const columns = (db) =>
-  db.prepare("SELECT name FROM pragma_table_info('claim')").all().map((c) => c.name);
+  db
+    .prepare("SELECT name FROM pragma_table_info('claim')")
+    .all()
+    .map((c) => c.name);
 
 test('新库直接建到当前版本', () => {
   const dir = tmpdir();

@@ -21,7 +21,7 @@ import { buildHotMemory } from './vendor/hot.js';
 import { resolveDbPath } from './vendor/paths.js';
 import { detectIntent, stripCue } from './vendor/capture.js';
 import { pickDurable, stripRuntimeNoise } from './vendor/autocapture.js';
-import { archiveMessages, messageText, messageKey } from './vendor/archive.js';
+import { messageText, messageKey } from './vendor/archive.js';
 import { runLoomCommand } from './vendor/command.js';
 import { Chronicle } from './vendor/chronicle.js';
 import { exportBundle, bundleToZip, importBundle, zipToBundle } from './vendor/bundle.js';
@@ -95,12 +95,10 @@ function acquireLedger(dbPath) {
   };
 }
 
-
 const OUT = {
   schema: { type: 'object', additionalProperties: true },
   render: (_args, value) => text(JSON.stringify(value, null, 2)),
 };
-
 
 /** 当前活着的实例；插件卸载或正在重载时是 null */
 function liveNow() {
@@ -139,11 +137,33 @@ export const Config = Schema
       scope: Schema.union([Schema.const('global'), Schema.const('workspace')])
         .description('global 跟着用户走；workspace 只属于当前工作区')
         .default('global'),
-      budget: Schema.number().description('单次 memory_recall 的 token 预算').min(50).max(4000).default(300),
+      budget: Schema.number()
+        .description('单次 memory_recall 的 token 预算')
+        .min(50)
+        .max(4000)
+        .default(300),
       hot: Schema.boolean().description('每轮自动注入热记忆').default(true),
-      hotBytes: Schema.number().description('热记忆字节上限（进每一轮上下文，就是长期成本）').min(0).max(16384).default(2048),
-      protocol: Schema.boolean().description('是否注入「什么时候该写、该查」的使用协议').default(true),
-      autoCapture: Schema.boolean().description('从对话里自动挑值得记的内容（规则判定，不调模型）').default(true),
+      hotBytes: Schema.number()
+        .description('热记忆字节上限（进每一轮上下文，就是长期成本）')
+        .min(0)
+        .max(16384)
+        .default(2048),
+      hotAppendOnly: Schema.boolean()
+        .description(
+          '热块追加式渲染：新记忆排在尾部而不是插到开头，避免每次写入都把整块往下推（前缀缓存友好）'
+        )
+        .default(true),
+      hotOrder: Schema.number()
+        .description('热块的 section 顺序号：越大越靠后。越靠后，块变化时要重付的后缀越短')
+        .min(1)
+        .max(999)
+        .default(95),
+      protocol: Schema.boolean()
+        .description('是否注入「什么时候该写、该查」的使用协议')
+        .default(true),
+      autoCapture: Schema.boolean()
+        .description('从对话里自动挑值得记的内容（规则判定，不调模型）')
+        .default(true),
       memoryScope: Schema.union([Schema.const('shared'), Schema.const('session')])
         .description('默认范围：shared 所有会话共享；session 每个会话只看自己写的 + 公共条目')
         .default('shared'),
@@ -153,7 +173,11 @@ export const Config = Schema
       autoCaptureLevel: Schema.union([Schema.const('normal'), Schema.const('strict')])
         .description('normal 连偏好与项目陈述一起记；strict 只认标识符与参数')
         .default('normal'),
-      epochDays: Schema.number().description('L0 时间片长度（天）；删除权的最小单位').min(1).max(365).default(7),
+      epochDays: Schema.number()
+        .description('L0 时间片长度（天）；删除权的最小单位')
+        .min(1)
+        .max(365)
+        .default(7),
       render: Schema.union([Schema.const('legend'), Schema.const('plain'), Schema.const('xml')])
         .description('取回结果的渲染策略')
         .default('legend'),
@@ -174,11 +198,13 @@ const PROTOCOL = [
   '- 不确定有没有记过 → 先 memory_outline 看目录。',
 ].join('\n');
 
-/** @param {any} ctx @param {{dbPath?:string, budget?:number, render?:'legend'|'plain'|'xml', epochDays?:number, hotBytes?:number, hot?:boolean}} config */
+/** @param {any} ctx @param {{dbPath?:string, budget?:number, render?:'legend'|'plain'|'xml', epochDays?:number, hotBytes?:number, hotAppendOnly?:boolean, hotOrder?:number, hot?:boolean}} config */
 export function apply(ctx, config = {}) {
   const budget = Number(config.budget ?? 300);
   const policy = config.render ?? 'legend';
   const hotBytes = Number(config.hotBytes ?? DEFAULT_HOT_BYTES);
+  const hotAppendOnly = config.hotAppendOnly !== false;
+  const hotOrder = Number(config.hotOrder ?? 95);
   const autoCaptureLevel = config.autoCaptureLevel === 'strict' ? 'strict' : 'normal';
   // 谁能看到谁的记忆：
   //   memoryScope=session      默认就把每个会话隔开（老开关，保留）
@@ -186,7 +212,9 @@ export function apply(ctx, config = {}) {
   // 两种同时存在时取并集：名单内的会话一定独立。
   const isolateAll = config.memoryScope === 'session';
   const isolatedSet = new Set(
-    (Array.isArray(config.isolatedSessions) ? config.isolatedSessions : []).map(String).filter(Boolean)
+    (Array.isArray(config.isolatedSessions) ? config.isolatedSessions : [])
+      .map(String)
+      .filter(Boolean)
   );
   const isIsolated = (sid) => !!sid && (isolateAll || isolatedSet.has(String(sid)));
   const scopeFilter = (sid) => (isIsolated(sid) ? { session: sid } : {});
@@ -210,7 +238,7 @@ export function apply(ctx, config = {}) {
       const body = err ? String(err?.stack ?? err) : String(note);
       appendRotating(
         path.join(path.dirname(dbPath), 'hook-errors.log'),
-        `${new Date().toISOString()} ${level} ${body}\n`,
+        `${new Date().toISOString()} ${level} ${body}\n`
       );
     } catch {}
   };
@@ -231,7 +259,11 @@ export function apply(ctx, config = {}) {
   let epoch = chronicle.currentEpoch({ everyDays: epochDays });
 
   /** 热记忆；传 sid 且该会话被划成独立时只看本会话 + 全局 */
-  const hotFor = (sid) => buildHotMemory(ledger.active(undefined, scopeFilter(sid)), { maxBytes: hotBytes });
+  const hotFor = (sid) =>
+    buildHotMemory(ledger.active(undefined, scopeFilter(sid)), {
+      maxBytes: hotBytes,
+      appendOnly: hotAppendOnly,
+    });
   const hotNow = () => hotFor(null);
 
   // 把自己登记成「当前实例」：上一代实例遗留的 prompt section 和路由，取到的都是这一份。
@@ -264,7 +296,7 @@ export function apply(ctx, config = {}) {
       if (sp?.section) {
         const dispose = sp.section({
           name: 'loom-hot-memory',
-          order: 90,
+          order: hotOrder,
           // hotText 读「当前实例」且永不抛：插件重载后旧 section 也能读到新实例的热记忆
           text: () => hotText(null),
         });
@@ -282,9 +314,17 @@ export function apply(ctx, config = {}) {
             if (!sid) return;
             const resolveSp = (from) => {
               let got;
-              try { got = from?.systemPrompt; } catch { got = undefined; }
+              try {
+                got = from?.systemPrompt;
+              } catch {
+                got = undefined;
+              }
               if (!got) {
-                try { got = typeof from?.get === 'function' ? from.get('systemPrompt') : undefined; } catch { got = undefined; }
+                try {
+                  got = typeof from?.get === 'function' ? from.get('systemPrompt') : undefined;
+                } catch {
+                  got = undefined;
+                }
               }
               return got;
             };
@@ -293,7 +333,7 @@ export function apply(ctx, config = {}) {
             agent.ctx.effect(() =>
               sp.section({
                 name: 'loom-hot-memory',
-                order: 90,
+                order: hotOrder,
                 text: () => hotText(sid),
               })
             );
@@ -323,12 +363,15 @@ export function apply(ctx, config = {}) {
     }
   }
 
-
   /** 收下一条内容：文档一定留，claim 能过闸门才留 */
-  const saveCaptured = (text, kind, sessionId) => {
-    const content = String(text ?? '').trim();
+  const saveCaptured = (raw, kind, sessionId) => {
+    const content = String(raw ?? '').trim();
     if (!content) return null;
-    const doc = ledger.putDoc({ title: makeTitle(content, { max: 24 }), body: content, tags: kind });
+    const doc = ledger.putDoc({
+      title: makeTitle(content, { max: 24 }),
+      body: content,
+      tags: kind,
+    });
     chronicle.append(epoch, { doc: doc.id, title: doc.title, at: Date.now() });
     const r = ingest({
       line: content,
@@ -383,17 +426,17 @@ export function apply(ctx, config = {}) {
           }
           if (!role || !msg) return;
 
-          const text = messageText(msg);
-          if (!text) return;
-          const key = messageKey({ role, content: text });
+          const body = messageText(msg);
+          if (!body) return;
+          const key = messageKey({ role, content: body });
           if (archivedKeys.has(key)) return;
           archivedKeys.add(key);
 
           chronicle.append(chronicle.currentEpoch({ everyDays: epochDays }), {
             kind: 'msg',
             role,
-            text,
-            len: text.length,
+            text: body,
+            len: body.length,
             at: event?.time ?? Date.now(),
             seq: event?.seq,
             session: session?.id ?? null,
@@ -405,7 +448,7 @@ export function apply(ctx, config = {}) {
           if (role === 'user' && config.autoCapture !== false) {
             try {
               // 先剥掉宿主塞进来的运行时上下文，否则只会看到"一坨多行长文"
-              const human = stripRuntimeNoise(text);
+              const human = stripRuntimeNoise(body);
               const pick = pickDurable(human, { level: autoCaptureLevel });
               if (pick.capture) {
                 const saved = saveCaptured(pick.text, pick.kind, session?.id);
@@ -457,7 +500,12 @@ export function apply(ctx, config = {}) {
       });
       if (r.ok) {
         epoch = chronicle.currentEpoch({ everyDays: epochDays });
-        chronicle.append(epoch, { claimId: r.claim.id, kind: r.claim.kind, aiw: r.claim.aiw, at: Date.now() });
+        chronicle.append(epoch, {
+          claimId: r.claim.id,
+          kind: r.claim.kind,
+          aiw: r.claim.aiw,
+          at: Date.now(),
+        });
       }
       return {
         ok: r.ok,
@@ -512,7 +560,11 @@ export function apply(ctx, config = {}) {
     parameters: {
       type: 'object',
       properties: {
-        used: { type: 'array', items: { type: 'string' }, description: '被引用的记忆 id（可只给前 8 位）' },
+        used: {
+          type: 'array',
+          items: { type: 'string' },
+          description: '被引用的记忆 id（可只给前 8 位）',
+        },
         correct: { type: 'boolean', description: '这轮结果是否正确；未知可省略' },
         answer: { type: 'string', description: '模型回答，用于自动归因（与 used 二选一或并用）' },
         items: { type: 'array', items: { type: 'string' }, description: '本轮注入的记忆 id 列表' },
@@ -520,7 +572,7 @@ export function apply(ctx, config = {}) {
       required: ['used'],
     },
     output: OUT,
-    async execute(args, exec = {}) {
+    async execute(args, _exec = {}) {
       const ids = [...new Set([...(args.items ?? []), ...(args.used ?? [])])];
       const active = ledger.active();
       const items = ids
@@ -534,7 +586,9 @@ export function apply(ctx, config = {}) {
       if (!items.length) return { ok: false, reason: '没有可结算的条目' };
 
       // used 里只给前缀时，补成全 id
-      const usedFull = (args.used ?? []).map((u) => items.find((i) => i.claimId.startsWith(u))?.claimId ?? u);
+      const usedFull = (args.used ?? []).map(
+        (u) => items.find((i) => i.claimId.startsWith(u))?.claimId ?? u
+      );
       const answer = args.answer ?? usedFull.map((u) => `[#${u.slice(0, 8)}]`).join(' ');
 
       const r = settleTurn({ answer, items, ledger, correct: args.correct ?? null });
@@ -545,19 +599,18 @@ export function apply(ctx, config = {}) {
   // ---- 遗忘扫描 ----
   ctx.tools.register({
     name: 'memory_decay',
-    description: '按时间与使用频次扫描记忆，给出降级建议（keep/summarize/pointerize/archive）。默认只预览。',
+    description:
+      '按时间与使用频次扫描记忆，给出降级建议（keep/summarize/pointerize/archive）。默认只预览。',
     parameters: {
       type: 'object',
       properties: { apply: { type: 'boolean', description: 'true 才真的标 cold' } },
     },
     output: OUT,
-    async execute(args = {}, exec = {}) {
+    async execute(args = {}, _exec = {}) {
       const r = sweep(ledger, { apply: args.apply === true });
       return { applied: r.applied, counts: r.counts, rows: r.rows.slice(0, 20) };
     },
   });
-
-
 
   // ---- 面板数据：/loom/state 路由 + 首屏种子 ----
   // webServer 不是启动即有：Cordis 文档明确说依赖它的注册要"服务就绪时"才发生。
@@ -580,7 +633,8 @@ export function apply(ctx, config = {}) {
       if (recentCache.epoch === epoch && recentCache.size === head.size) return recentCache.items;
 
       // msg 事件和 doc/claim/forget 事件混在同一条链里，所以多取一些尾部再筛
-      const pick = (recs) => recs.filter((ev) => ev?.event?.kind === 'msg' && ev.event.role !== 'tool');
+      const pick = (recs) =>
+        recs.filter((ev) => ev?.event?.kind === 'msg' && ev.event.role !== 'tool');
       let recs = chronicle.tail(epoch, Math.max(want * 4, 120));
       let msgs = pick(recs);
       // 尾部大多是事件、凑不够 30 条消息：放大窗口再取一次（读的都是尾部字节，仍很便宜）
@@ -590,7 +644,11 @@ export function apply(ctx, config = {}) {
       }
       const items = msgs
         .slice(-want)
-        .map((ev) => ({ role: ev.event.role, text: String(ev.event.text ?? '').slice(0, 240), at: ev.event.at }))
+        .map((ev) => ({
+          role: ev.event.role,
+          text: String(ev.event.text ?? '').slice(0, 240),
+          at: ev.event.at,
+        }))
         .reverse();
       recentCache = { epoch, size: head.size, items };
       return items;
@@ -632,7 +690,12 @@ export function apply(ctx, config = {}) {
       archived,
       byKind: counts.byKind,
       epoch,
-      hot: { bytes: hot.bytes, rule: hot.counts.rule, pref: hot.counts.pref, fact: hot.counts.fact },
+      hot: {
+        bytes: hot.bytes,
+        rule: hot.counts.rule,
+        pref: hot.counts.pref,
+        fact: hot.counts.fact,
+      },
       verify: { ok: rows.every((r) => r.ok), events: rows.reduce((n, r) => n + r.events, 0) },
       items: (() => {
         try {
@@ -643,7 +706,9 @@ export function apply(ctx, config = {}) {
       })(),
       docs: (() => {
         try {
-          return ledger.docs(30).map((d) => ({ id: d.id, title: d.title, tags: d.tags, updatedAt: d.updated_at }));
+          return ledger
+            .docs(30)
+            .map((d) => ({ id: d.id, title: d.title, tags: d.tags, updatedAt: d.updated_at }));
         } catch {
           return [];
         }
@@ -691,9 +756,17 @@ export function apply(ctx, config = {}) {
     // Cordis 的服务代理对未 inject 的属性访问会抛错，所以每条路都单独兜
     const resolveWeb = (from) => {
       let got;
-      try { got = from?.webServer; } catch { got = undefined; }
+      try {
+        got = from?.webServer;
+      } catch {
+        got = undefined;
+      }
       if (!got) {
-        try { got = typeof from?.get === 'function' ? from.get('webServer') : undefined; } catch { got = undefined; }
+        try {
+          got = typeof from?.get === 'function' ? from.get('webServer') : undefined;
+        } catch {
+          got = undefined;
+        }
       }
       return got;
     };
@@ -766,7 +839,10 @@ export function apply(ctx, config = {}) {
         if (!SHARED.live) return bail(503, 'loom 插件已停用或正在重载，稍后再试');
         const blocked = denied(req);
         if (blocked) {
-          hookLog(new Error(`denied(${blocked}) ${req?.method ?? '?'} ${String(req?.url ?? '')}`), 'route denied');
+          hookLog(
+            new Error(`denied(${blocked}) ${req?.method ?? '?'} ${String(req?.url ?? '')}`),
+            'route denied'
+          );
           return bail(403, '拒绝访问：跨源请求没有携带 x-loom-token');
         }
         if (typeof handler !== 'function') return bail(503, 'loom 路由还没有就绪');
@@ -815,7 +891,8 @@ export function apply(ctx, config = {}) {
           if (!SETTING_SPECS[key]) return reply(400, { ok: false, error: '不可设置的键：' + key });
 
           const editor = typeof ctx.get === 'function' ? ctx.get('configEditor') : undefined;
-          if (!editor?.edit || !editor?.entries) return reply(503, { ok: false, error: '本宿主没有 configEditor' });
+          if (!editor?.edit || !editor?.entries)
+            return reply(503, { ok: false, error: '本宿主没有 configEditor' });
 
           const list = editor.entries();
           const entry =
@@ -848,8 +925,10 @@ export function apply(ctx, config = {}) {
           const dropped = applied?.dropped ?? [];
           if (dropped.length) {
             hookLog(
-              new Error(`config 里这些键不合规，已回退默认：${dropped.map((d) => d.key).join(', ')}`),
-              'config pruned',
+              new Error(
+                `config 里这些键不合规，已回退默认：${dropped.map((d) => d.key).join(', ')}`
+              ),
+              'config pruned'
             );
           }
           return reply(200, {
@@ -883,7 +962,10 @@ export function apply(ctx, config = {}) {
           res.end();
           return;
         }
-        const reply = (code, obj) => { res.writeHead(code, cors); res.end(JSON.stringify(obj)); };
+        const reply = (code, obj) => {
+          res.writeHead(code, cors);
+          res.end(JSON.stringify(obj));
+        };
         try {
           const body = JSON.parse((await readBody(req)).toString('utf8') || '{}');
           const key = String(body.id ?? '').trim();
@@ -891,7 +973,11 @@ export function apply(ctx, config = {}) {
           if (!claim) return reply(404, { ok: false, error: '找不到这条记忆' });
           ledger.supersede(claim.id, null, body.reason ?? '面板删除');
           for (const d of ledger.docsByBody(claim.body)) ledger.setDocCold(d.id, true);
-          chronicle.append(epoch, { forget: claim.id, reason: body.reason ?? '面板删除', at: Date.now() });
+          chronicle.append(epoch, {
+            forget: claim.id,
+            reason: body.reason ?? '面板删除',
+            at: Date.now(),
+          });
           return reply(200, { ok: true, id: claim.id.slice(0, 8) });
         } catch (e) {
           return reply(500, { ok: false, error: String(e?.message ?? e) });
@@ -909,14 +995,22 @@ export function apply(ctx, config = {}) {
           res.end();
           return;
         }
-        const reply = (code, obj) => { res.writeHead(code, cors); res.end(JSON.stringify(obj)); };
+        const reply = (code, obj) => {
+          res.writeHead(code, cors);
+          res.end(JSON.stringify(obj));
+        };
         try {
           const body = JSON.parse((await readBody(req)).toString('utf8') || '{}');
           const title = String(body.title ?? '').trim();
-          const text = String(body.body ?? '');
+          const docText = String(body.body ?? '');
           if (!title) return reply(400, { ok: false, error: '标题不能为空' });
-          if (!text.trim()) return reply(400, { ok: false, error: '正文不能为空' });
-          const doc = ledger.putDoc({ id: body.id || undefined, title, body: text, tags: body.tags ?? '' });
+          if (!docText.trim()) return reply(400, { ok: false, error: '正文不能为空' });
+          const doc = ledger.putDoc({
+            id: body.id || undefined,
+            title,
+            body: docText,
+            tags: body.tags ?? '',
+          });
           chronicle.append(epoch, { doc: doc.id, title: doc.title, at: Date.now() });
           return reply(200, { ok: true, id: doc.id, title: doc.title, chars: doc.body.length });
         } catch (e) {
@@ -935,7 +1029,10 @@ export function apply(ctx, config = {}) {
           res.end();
           return;
         }
-        const reply = (code, obj) => { res.writeHead(code, cors); res.end(JSON.stringify(obj)); };
+        const reply = (code, obj) => {
+          res.writeHead(code, cors);
+          res.end(JSON.stringify(obj));
+        };
         try {
           const buf = await readBody(req);
           if (!buf.length) return reply(400, { ok: false, error: '空文件' });
@@ -974,11 +1071,19 @@ export function apply(ctx, config = {}) {
             body: String(r.body ?? '').slice(0, 4000),
           }));
           res.writeHead(200, cors);
-          res.end(JSON.stringify({
-            ok: true,
-            doc: { id: doc.id, title: doc.title, body: doc.body, tags: doc.tags, updatedAt: doc.updated_at },
-            revs,
-          }));
+          res.end(
+            JSON.stringify({
+              ok: true,
+              doc: {
+                id: doc.id,
+                title: doc.title,
+                body: doc.body,
+                tags: doc.tags,
+                updatedAt: doc.updated_at,
+              },
+              revs,
+            })
+          );
         } catch (e) {
           res.writeHead(500, cors);
           res.end(JSON.stringify({ ok: false, error: String(e?.message ?? e) }));
@@ -1001,7 +1106,10 @@ export function apply(ctx, config = {}) {
           });
           res.end(zip);
         } catch (e) {
-          res.writeHead(500, { 'content-type': 'application/json', 'access-control-allow-origin': '*' });
+          res.writeHead(500, {
+            'content-type': 'application/json',
+            'access-control-allow-origin': '*',
+          });
           res.end(JSON.stringify({ ok: false, error: String(e?.message ?? e) }));
         }
       },
@@ -1020,12 +1128,21 @@ export function apply(ctx, config = {}) {
           // 默认只看对话（user/assistant）；要工具输出显式传 roles=user,assistant,tool
           const rolesParam = String(url.searchParams.get('roles') ?? 'user,assistant');
           const sessionFilter = String(url.searchParams.get('session') ?? '').trim() || null;
-          const roles = new Set(rolesParam.split(',').map((r) => r.trim()).filter(Boolean));
+          const roles = new Set(
+            rolesParam
+              .split(',')
+              .map((r) => r.trim())
+              .filter(Boolean)
+          );
           const hits = [];
           for (const e of chronicle.epochs()) {
             if (e.destroyed) continue;
             let events = [];
-            try { events = chronicle.read(e.id); } catch { continue; }
+            try {
+              events = chronicle.read(e.id);
+            } catch {
+              continue;
+            }
             for (const ev of events) {
               const m = ev?.event;
               if (m?.kind !== 'msg') continue;
@@ -1056,7 +1173,11 @@ export function apply(ctx, config = {}) {
         for (const e of chronicle.epochs()) {
           if (e.destroyed) continue;
           let events = [];
-          try { events = chronicle.read(e.id); } catch { continue; }
+          try {
+            events = chronicle.read(e.id);
+          } catch {
+            continue;
+          }
           for (const ev of events) {
             const m = ev?.event;
             if (m?.kind !== 'msg' || !m.session) continue;
@@ -1110,13 +1231,20 @@ export function apply(ctx, config = {}) {
 
       if (!rows.length) {
         rows = [...counts.keys()].map((id) => ({
-          id, title: '', createdAt: 0, cwd: '', live: false, messages: counts.get(id) || 0,
+          id,
+          title: '',
+          createdAt: 0,
+          cwd: '',
+          live: false,
+          messages: counts.get(id) || 0,
         }));
       }
 
       for (const r of rows) {
         if (!r.title) {
-          const t = String(firstText.get(r.id) ?? '').replace(/\s+/g, ' ').trim();
+          const t = String(firstText.get(r.id) ?? '')
+            .replace(/\s+/g, ' ')
+            .trim();
           r.title = t ? (t.length > 20 ? t.slice(0, 20) + '…' : t) : '未命名对话';
         }
         r.isolated = isIsolated(r.id);
@@ -1129,7 +1257,12 @@ export function apply(ctx, config = {}) {
           // 第三条是为了让人能把它从名单里取出来——离线且没归档过消息的独立会话，
           // 一旦被这里的 liveness 过滤掉，面板上就再也选不到它，等于单向门。
           .filter((r) => r.isolated || r.live || r.messages > 0)
-          .sort((a, b) => (b.live ? 1 : 0) - (a.live ? 1 : 0) || b.createdAt - a.createdAt || b.messages - a.messages)
+          .sort(
+            (a, b) =>
+              (b.live ? 1 : 0) - (a.live ? 1 : 0) ||
+              b.createdAt - a.createdAt ||
+              b.messages - a.messages
+          )
           .slice(0, 80),
       };
     };
@@ -1176,7 +1309,10 @@ export function apply(ctx, config = {}) {
           res.end();
           return;
         }
-        const reply = (code, obj) => { res.writeHead(code, cors); res.end(JSON.stringify(obj)); };
+        const reply = (code, obj) => {
+          res.writeHead(code, cors);
+          res.end(JSON.stringify(obj));
+        };
         try {
           const body = JSON.parse((await readBody(req)).toString('utf8') || '{}');
           const id = String(body.id ?? '').trim();
@@ -1184,21 +1320,26 @@ export function apply(ctx, config = {}) {
           if (!id) return reply(400, { ok: false, error: '缺少会话 id' });
 
           const editor = typeof ctx.get === 'function' ? ctx.get('configEditor') : undefined;
-          if (!editor?.edit || !editor?.entries) return reply(503, { ok: false, error: '本宿主没有 configEditor' });
+          if (!editor?.edit || !editor?.entries)
+            return reply(503, { ok: false, error: '本宿主没有 configEditor' });
           const entry = CONFIG_ENTRY(editor);
           if (!entry) return reply(404, { ok: false, error: '找不到 loom-memory 这一行配置' });
 
           let next = [];
           await editor.edit(entry, (current) => {
             const set = new Set(
-              (Array.isArray(current.isolatedSessions) ? current.isolatedSessions : []).map(String).filter(Boolean)
+              (Array.isArray(current.isolatedSessions) ? current.isolatedSessions : [])
+                .map(String)
+                .filter(Boolean)
             );
-            if (on) set.add(id); else set.delete(id);
+            if (on) set.add(id);
+            else set.delete(id);
             next = [...set];
             return { ...current, isolatedSessions: next };
           });
           // 本次 apply 内部的缓存也要立刻跟着变，否则要等重启才生效
-          if (on) isolatedSet.add(id); else isolatedSet.delete(id);
+          if (on) isolatedSet.add(id);
+          else isolatedSet.delete(id);
           return reply(200, {
             ok: true,
             id,
@@ -1284,7 +1425,11 @@ export function apply(ctx, config = {}) {
                   if (e.destroyed) return { ok: true, events: 0 };
                   const v = chronicle.verify(e.id);
                   let n = 0;
-                  try { n = chronicle.read(e.id).length; } catch { n = 0; }
+                  try {
+                    n = chronicle.read(e.id).length;
+                  } catch {
+                    n = 0;
+                  }
                   return { ok: v.ok, events: n };
                 });
                 return {
@@ -1317,7 +1462,7 @@ export function apply(ctx, config = {}) {
       required: ['from', 'to'],
     },
     output: OUT,
-    async execute(args, exec = {}) {
+    async execute(args, _exec = {}) {
       const a = ledger.get(args.from) ?? ledger.active().find((c) => c.id.startsWith(args.from));
       const b = ledger.get(args.to) ?? ledger.active().find((c) => c.id.startsWith(args.to));
       if (!a || !b) return { ok: false, reason: '端点不存在' };
@@ -1339,7 +1484,7 @@ export function apply(ctx, config = {}) {
       required: ['id'],
     },
     output: OUT,
-    async execute(args, exec = {}) {
+    async execute(args, _exec = {}) {
       const c = ledger.get(args.id) ?? ledger.active().find((x) => x.id.startsWith(args.id));
       if (!c) return { ok: false, reason: '找不到这条记忆' };
       const rows = ledger.related(c.id, { depth: Number(args.depth ?? 1), type: args.type });
@@ -1363,7 +1508,7 @@ export function apply(ctx, config = {}) {
       required: ['text'],
     },
     output: OUT,
-    async execute(args, exec = {}) {
+    async execute(args, _exec = {}) {
       const intent = detectIntent(args.text);
       const content = stripCue(args.text) || String(args.text ?? '');
       const kind = args.kind ?? intent.kind;
@@ -1394,14 +1539,22 @@ export function apply(ctx, config = {}) {
         rejected = r.gate.verdict;
       }
 
-      return { ok: true, docId: doc.id, claimId: claimId ? claimId.slice(0, 8) : null, kind, due: intent.due, rejected };
+      return {
+        ok: true,
+        docId: doc.id,
+        claimId: claimId ? claimId.slice(0, 8) : null,
+        kind,
+        due: intent.due,
+        rejected,
+      };
     },
   });
 
   // ---- 项目文档 ----
   ctx.tools.register({
     name: 'memory_doc_write',
-    description: '写一篇项目文档（长文，不受 AI文 短断言限制）。同标题视为同一篇，会更新而不是堆叠。',
+    description:
+      '写一篇项目文档（长文，不受 AI文 短断言限制）。同标题视为同一篇，会更新而不是堆叠。',
     parameters: {
       type: 'object',
       properties: {
@@ -1412,7 +1565,7 @@ export function apply(ctx, config = {}) {
       required: ['title', 'body'],
     },
     output: OUT,
-    async execute(args, exec = {}) {
+    async execute(args, _exec = {}) {
       const d = ledger.putDoc({ title: args.title, body: args.body, tags: args.tags ?? '' });
       chronicle.append(epoch, { doc: d.id, title: d.title, at: Date.now() });
       return { ok: true, id: d.id, title: d.title, chars: d.body.length };
@@ -1431,7 +1584,7 @@ export function apply(ctx, config = {}) {
       required: ['query'],
     },
     output: OUT,
-    async execute(args, exec = {}) {
+    async execute(args, _exec = {}) {
       const hits = ledger.searchDocs(args.query, { limit: Number(args.limit ?? 5) });
       return {
         hits: hits.map((h) => ({ id: h.id, title: h.title, excerpt: h.body.slice(0, 160) })),
@@ -1443,20 +1596,30 @@ export function apply(ctx, config = {}) {
   // ---- 热记忆预览 ----
   ctx.tools.register({
     name: 'memory_hot',
-    description: '看这一轮被自动注入了什么（热记忆原文 + 统计），用来调 hotBytes 或验证注入是否生效。',
+    description:
+      '看这一轮被自动注入了什么（热记忆原文 + 统计），用来调 hotBytes 或验证注入是否生效。',
     parameters: { type: 'object', properties: {} },
     output: OUT,
-    async execute(args, exec = {}) {
+    async execute(args, _exec = {}) {
       const hot = hotNow();
-      return { injected: config.hot !== false, budgetBytes: hotBytes, bytes: hot.bytes, counts: hot.counts, omitted: hot.omitted, text: hot.text };
+      return {
+        injected: config.hot !== false,
+        budgetBytes: hotBytes,
+        // 这两个字段兼作「补丁是否已加载」的探针：老模块不返回它们
+        appendOnly: hotAppendOnly,
+        sectionOrder: hotOrder,
+        bytes: hot.bytes,
+        counts: hot.counts,
+        omitted: hot.omitted,
+        text: hot.text,
+      };
     },
   });
 
   // ---- 原文检索：从归档里把上下文捞回来 ----
   ctx.tools.register({
     name: 'memory_archive_search',
-    description:
-      '在原文归档里检索（逐字，不过滤寒暄与粘贴）。返回命中的对话片段，用于还原上下文。',
+    description: '在原文归档里检索（逐字，不过滤寒暄与粘贴）。返回命中的对话片段，用于还原上下文。',
     parameters: {
       type: 'object',
       properties: {
@@ -1477,7 +1640,11 @@ export function apply(ctx, config = {}) {
       for (const e of chronicle.epochs()) {
         if (e.destroyed) continue;
         let events = [];
-        try { events = chronicle.read(e.id); } catch { continue; }
+        try {
+          events = chronicle.read(e.id);
+        } catch {
+          continue;
+        }
         for (const ev of events) {
           const m = ev.event;
           if (m?.kind !== 'msg') continue;
@@ -1496,10 +1663,11 @@ export function apply(ctx, config = {}) {
   // ---- 自检：这个宿主里哪些服务可用 ----
   ctx.tools.register({
     name: 'memory_diag',
-    description: '插件自检：本宿主里 systemPrompt / webServer / commands 是否可用，以及注入与面板的挂载状态。',
+    description:
+      '插件自检：本宿主里 systemPrompt / webServer / commands 是否可用，以及注入与面板的挂载状态。',
     parameters: { type: 'object', properties: {} },
     output: OUT,
-    async execute(args, exec = {}) {
+    async execute(args, _exec = {}) {
       const has = (name) => {
         try {
           const v = typeof ctx.get === 'function' ? ctx.get(name) : undefined;
@@ -1577,17 +1745,27 @@ export function apply(ctx, config = {}) {
     description: '校验 L0 哈希链：条目数、链是否连续、有没有被改写。',
     parameters: { type: 'object', properties: {} },
     output: OUT,
-    async execute(args, exec = {}) {
+    async execute(args, _exec = {}) {
       const epochs = chronicle.epochs();
       const rows = epochs.map((e) => {
         if (e.destroyed) return { id: e.id, destroyed: true, events: 0, ok: true };
         const v = chronicle.verify(e.id);
         let events = 0;
-        try { events = chronicle.read(e.id).length; } catch { events = -1; }
+        try {
+          events = chronicle.read(e.id).length;
+        } catch {
+          events = -1;
+        }
         return { id: e.id, destroyed: false, events, ok: v.ok };
       });
       const events = rows.reduce((n, r) => n + Math.max(0, r.events), 0);
-      return { ok: rows.every((r) => r.ok), events, epochs: rows.length, current: epoch, detail: rows };
+      return {
+        ok: rows.every((r) => r.ok),
+        events,
+        epochs: rows.length,
+        current: epoch,
+        detail: rows,
+      };
     },
   });
 
@@ -1606,7 +1784,7 @@ export function apply(ctx, config = {}) {
       required: ['id'],
     },
     output: OUT,
-    async execute(args, exec = {}) {
+    async execute(args, _exec = {}) {
       const id = String(args.id ?? '').trim();
       const claim = ledger.get(id) ?? ledger.active().find((c) => c.id.startsWith(id));
       if (!claim) return { ok: false, reason: '找不到这条记忆' };
@@ -1617,7 +1795,11 @@ export function apply(ctx, config = {}) {
       // 一起写下的文档也要失活，否则记忆能靠文档检索"复活"
       const docs = ledger.docsByBody(claim.body);
       for (const d of docs) ledger.setDocCold(d.id, true);
-      chronicle.append(epoch, { forget: claim.id, reason: args.reason ?? '用户要求', at: Date.now() });
+      chronicle.append(epoch, {
+        forget: claim.id,
+        reason: args.reason ?? '用户要求',
+        at: Date.now(),
+      });
 
       return { ok: true, id: claim.id.slice(0, 8), supersededBy: null };
     },

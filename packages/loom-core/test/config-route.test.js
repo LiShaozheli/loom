@@ -47,7 +47,14 @@ function boot(initial = {}) {
   const set = async (key, value) => {
     let status = 0;
     let body = '';
-    const res = { writeHead: (c) => { status = c; }, end: (x) => { body = String(x ?? ''); } };
+    const res = {
+      writeHead: (c) => {
+        status = c;
+      },
+      end: (x) => {
+        body = String(x ?? '');
+      },
+    };
     const req = {
       method: 'POST',
       url: '/loom/config',

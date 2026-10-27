@@ -10,17 +10,12 @@
  *   abstain  —— 语料里没有答案的问题，应返回空
  */
 
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import { ingest } from '../packages/loom-core/src/ingest.js';
 import { recall } from '../packages/loom-core/src/recall.js';
 import { SqliteLedger } from '../packages/loom-core/src/sqlite-ledger.js';
 import { stripTail } from '../packages/loom-core/src/aiw.js';
 
-const here = path.dirname(fileURLToPath(import.meta.url));
-const repo = path.resolve(here, '../..');
 const { loadCorpus, loadQa } = await import('../packages/loom-core/src/eval-data.js');
 const corpus = loadCorpus().items;
 const qa = loadQa();
@@ -47,7 +42,9 @@ for (const item of corpus) {
 
 const idOf = (itemId) => {
   // ingest 内部按内容指纹算 id，这里反查
-  const hit = db.active().find((c) => stripTail(c.aiw) === stripTail(corpus.find((i) => i.id === itemId).aiw));
+  const hit = db
+    .active()
+    .find((c) => stripTail(c.aiw) === stripTail(corpus.find((i) => i.id === itemId).aiw));
   return hit?.id;
 };
 
@@ -70,9 +67,15 @@ const abstainEmpty = abstain.filter((r) => r.n === 0).length / abstain.length;
 
 const pct = (x) => (x * 100).toFixed(1) + '%';
 console.log(`\n检索评测 · ${corpus.length} 条语料 · ${qa.length} 题 · budget ${budget}`);
-console.log(`recall@1 ${pct(at(1))} · recall@3 ${pct(at(3))} · recall@5 ${pct(at(5))} · MRR ${mrr.toFixed(3)}`);
-console.log(`有答案的题 ${disc.length} 条，其中取回为空 ${disc.filter((r) => r.n === 0).length} 条`);
-console.log(`abstain ${abstain.length} 条，返回空 ${abstainEmpty ? pct(abstainEmpty) : '0%'}；全库空返回 ${empty}/${rows.length}`);
+console.log(
+  `recall@1 ${pct(at(1))} · recall@3 ${pct(at(3))} · recall@5 ${pct(at(5))} · MRR ${mrr.toFixed(3)}`
+);
+console.log(
+  `有答案的题 ${disc.length} 条，其中取回为空 ${disc.filter((r) => r.n === 0).length} 条`
+);
+console.log(
+  `abstain ${abstain.length} 条，返回空 ${abstainEmpty ? pct(abstainEmpty) : '0%'}；全库空返回 ${empty}/${rows.length}`
+);
 console.log(`admission 跳过 ${rows.filter((r) => r.skipped).length} 条（问题不该被跳过）`);
 
 const missed = disc.filter((r) => r.rank === 0).slice(0, 5);

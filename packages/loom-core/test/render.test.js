@@ -27,7 +27,10 @@ test('plain：不带符号，编号列表', () => {
 });
 
 test('xml：结构化且转义', () => {
-  const s = renderXml({ items: [{ claimId: 'x1', text: 'a & b <c>', level: 'full' }], pointers: [] });
+  const s = renderXml({
+    items: [{ claimId: 'x1', text: 'a & b <c>', level: 'full' }],
+    pointers: [],
+  });
   assert.ok(s.startsWith('<memory>'));
   assert.ok(s.includes('&amp;'));
   assert.ok(s.includes('&lt;c&gt;'));

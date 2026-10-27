@@ -18,7 +18,10 @@ const arg = (k, d) => {
 };
 const dbPath = String(dbPathOf());
 function dbPathOf() {
-  return arg('db', path.join(process.env.DSH_HOME ?? path.join(os.homedir(), '.dsh'), 'loom', 'loom.db'));
+  return arg(
+    'db',
+    path.join(process.env.DSH_HOME ?? path.join(os.homedir(), '.dsh'), 'loom', 'loom.db')
+  );
 }
 const dry = argv.includes('--dry');
 

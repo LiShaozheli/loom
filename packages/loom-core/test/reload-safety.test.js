@@ -65,7 +65,11 @@ function boot(dbPath, server = makeServer()) {
     sections,
     server,
     dispose: () => cleanups.forEach((c) => c()),
-    hotText: () => sections.filter((s) => s.name === 'loom-hot-memory').map((s) => s.text()).join(''),
+    hotText: () =>
+      sections
+        .filter((s) => s.name === 'loom-hot-memory')
+        .map((s) => s.text())
+        .join(''),
   };
 }
 
@@ -93,7 +97,9 @@ test('旧实例 dispose 之后，它的 section 读到的是新实例的热记�
 
     // 模拟宿主重载：新实例接管同一个库
     const b = boot(dbPath);
-    await b.tools.get('memory_write').execute({ line: '验证：重载之后新写的一条。', kind: 'fact' }, {});
+    await b.tools
+      .get('memory_write')
+      .execute({ line: '验证：重载之后新写的一条。', kind: 'fact' }, {});
 
     a.dispose(); // 引用计数只减不关，连接仍然可用
 
@@ -157,7 +163,11 @@ test('重载不会在 webServer 上重复注册，handler 永远指向最新实�
       threw = err;
     }
     assert.equal(threw, null, `重载不该把 duplicate exact route 抛出来：${threw?.message ?? ''}`);
-    assert.deepEqual([...server.routes.keys()].sort(), pathsA.slice().sort(), '路由集合不变，也没有重复');
+    assert.deepEqual(
+      [...server.routes.keys()].sort(),
+      pathsA.slice().sort(),
+      '路由集合不变，也没有重复'
+    );
 
     // 分发经过 SHARED.routes，所以要落到新实例上
     const { got, res } = sink();
@@ -167,7 +177,9 @@ test('重载不会在 webServer 上重复注册，handler 永远指向最新实�
     a.dispose();
     // 新实例还活着，路由必须继续可用（不是 503）
     const after = sink();
-    await server.routes.get('/loom/state').handler({ method: 'GET', url: '/loom/state' }, after.res);
+    await server.routes
+      .get('/loom/state')
+      .handler({ method: 'GET', url: '/loom/state' }, after.res);
     assert.equal(after.got.status, 200, after.got.body);
 
     b.dispose();
@@ -198,7 +210,9 @@ test('插件卸载期间路由给出 503，重新加载后复用旧路由继续�
     assert.equal(server.routes.size, 10, '路由集合不变，也没有重复');
 
     const after = sink();
-    await server.routes.get('/loom/state').handler({ method: 'GET', url: '/loom/state' }, after.res);
+    await server.routes
+      .get('/loom/state')
+      .handler({ method: 'GET', url: '/loom/state' }, after.res);
     assert.equal(after.got.status, 200, after.got.body);
 
     b.dispose();

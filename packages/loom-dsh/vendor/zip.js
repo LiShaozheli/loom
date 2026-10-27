@@ -47,7 +47,9 @@ export function makeZip(entries) {
 
   for (const entry of entries) {
     const nameBuf = Buffer.from(entry.name, 'utf8');
-    const dataBuf = Buffer.isBuffer(entry.data) ? entry.data : Buffer.from(String(entry.data), 'utf8');
+    const dataBuf = Buffer.isBuffer(entry.data)
+      ? entry.data
+      : Buffer.from(String(entry.data), 'utf8');
     const crc = crc32(dataBuf);
 
     const local = Buffer.concat([
@@ -172,7 +174,10 @@ export function readZip(buf, limits = {}) {
       try {
         data = zlib.inflateRawSync(raw, { maxOutputLength: cap.maxEntryBytes });
       } catch (e) {
-        if (e?.code === 'ERR_BUFFER_TOO_LARGE' || /maxOutputLength|buffer/i.test(String(e?.message))) {
+        if (
+          e?.code === 'ERR_BUFFER_TOO_LARGE' ||
+          /maxOutputLength|buffer/i.test(String(e?.message))
+        ) {
           throw new Error(`ZIP 条目解压后超过 ${cap.maxEntryBytes} 字节，拒绝读取：${name}`);
         }
         throw new Error(`ZIP 条目解压失败：${name}（${e?.message ?? e}）`);

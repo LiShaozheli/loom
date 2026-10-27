@@ -31,7 +31,12 @@ export function exportBundle(ledger, opts = {}) {
   const manifest = {
     version: BUNDLE_VERSION,
     exportedAt: new Date(now).toISOString(),
-    counts: { claims: claims.length, docs: docs.length, revisions: revs.length, edges: edges.length },
+    counts: {
+      claims: claims.length,
+      docs: docs.length,
+      revisions: revs.length,
+      edges: edges.length,
+    },
   };
 
   return { manifest, claims, docs, revs, edges };
@@ -98,7 +103,13 @@ export function importBundle(ledger, bundle, opts = {}) {
 
   for (const d of bundle.docs ?? []) {
     if (!d?.id) continue;
-    ledger.putDoc({ id: d.id, title: d.title, body: d.body, tags: d.tags ?? '', now: d.updated_at ?? now });
+    ledger.putDoc({
+      id: d.id,
+      title: d.title,
+      body: d.body,
+      tags: d.tags ?? '',
+      now: d.updated_at ?? now,
+    });
     counts.docs++;
   }
 
@@ -108,7 +119,11 @@ export function importBundle(ledger, bundle, opts = {}) {
 
   for (const e of bundle.edges ?? []) {
     if (!e.from || !e.to) continue;
-    ledger.link(e.from, e.to, { type: e.type ?? 'semantic', weight: e.weight ?? 1, now: e.createdAt ?? now });
+    ledger.link(e.from, e.to, {
+      type: e.type ?? 'semantic',
+      weight: e.weight ?? 1,
+      now: e.createdAt ?? now,
+    });
     counts.edges++;
   }
 

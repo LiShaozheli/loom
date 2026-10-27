@@ -74,7 +74,12 @@ test('outline：按类型分组、带数量、受预算约束', () => {
 });
 
 test('outline：预算极小时只剩一个节点或空', () => {
-  const claims = Array.from({ length: 30 }, (_, i) => ({ id: `${i}`, kind: i % 2 ? 'fact' : 'pref', title: '标题', aiw: 'x' }));
+  const claims = Array.from({ length: 30 }, (_, i) => ({
+    id: `${i}`,
+    kind: i % 2 ? 'fact' : 'pref',
+    title: '标题',
+    aiw: 'x',
+  }));
   const o = buildOutline(claims, { budget: 4 });
   assert.ok(o.nodes.length <= 2);
   assert.ok(o.usedTokens <= 4);
@@ -89,7 +94,13 @@ test('recall：应答直接短路，不进检索', () => {
 
 test('recall：提问走完整管道，预算内取回', () => {
   const claims = [
-    { id: 'a', kind: 'decision', title: '鉴权改造', aiw: '改鉴权→JWT，refresh轮换→失败→回滚session。', validFrom: 1 },
+    {
+      id: 'a',
+      kind: 'decision',
+      title: '鉴权改造',
+      aiw: '改鉴权→JWT，refresh轮换→失败→回滚session。',
+      validFrom: 1,
+    },
     { id: 'b', kind: 'pref', title: '文档语言', aiw: '代码注英文，文档中文。', validFrom: 1 },
     { id: 'c', kind: 'fact', title: '端口', aiw: '预发:8081。', validFrom: 1 },
   ];

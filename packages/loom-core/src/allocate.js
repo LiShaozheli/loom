@@ -22,12 +22,24 @@ export function allocate({ candidates, budget, counter = chars4Counter, minScore
 
     if (used + fullCost <= budget) {
       used += fullCost;
-      items.push({ claimId: claim.id, text: claim.aiw, level: 'full', score: cand.score, tokens: fullCost });
+      items.push({
+        claimId: claim.id,
+        text: claim.aiw,
+        level: 'full',
+        score: cand.score,
+        tokens: fullCost,
+      });
       continue;
     }
     if (used + titleCost <= budget) {
       used += titleCost;
-      items.push({ claimId: claim.id, text: claim.title, level: 'title', score: cand.score, tokens: titleCost });
+      items.push({
+        claimId: claim.id,
+        text: claim.title,
+        level: 'title',
+        score: cand.score,
+        tokens: titleCost,
+      });
       continue;
     }
     // 装不下正文也装不下标题：降级成指针（不占 token）

@@ -73,7 +73,7 @@ async function call(route, { method = 'GET', url = '/', headers = {}, body = '' 
 }
 
 /** 从首屏种子注入里把令牌捞出来（模拟面板页面自己的视角） */
-function extractToken(routes) {
+function extractToken() {
   const src = fs.readFileSync(new URL('../../loom-dsh/index.js', import.meta.url), 'utf8');
   const m = src.match(/__LOOM_TOKEN__=\$\{JSON\.stringify\(SHARED\.token\)\}/);
   assert.ok(m, '首屏注入里必须带上令牌');

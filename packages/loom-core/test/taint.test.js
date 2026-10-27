@@ -5,8 +5,14 @@ import { buildHotMemory, isEmptyHot } from '../src/hot.js';
 import { importBundle, EXPORT_VERSION } from '../src/transfer.js';
 
 const claim = (over = {}) => ({
-  id: 'c1', kind: 'rule', aiw: '红线：先备份再改库', title: 't',
-  validFrom: 1, cold: false, taint: 'none', ...over,
+  id: 'c1',
+  kind: 'rule',
+  aiw: '红线：先备份再改库',
+  title: 't',
+  validFrom: 1,
+  cold: false,
+  taint: 'none',
+  ...over,
 });
 
 test('被标为外部的规则不进自动注入，但会被计数报出来', () => {
@@ -17,9 +23,12 @@ test('被标为外部的规则不进自动注入，但会被计数报出来', ()
 });
 
 test('未标记或 none 的照旧注入（老数据不受影响）', () => {
-  const hot = buildHotMemory([claim({ taint: undefined }), claim({ id: 'c2', kind: 'pref', aiw: '喜欢短句' })], {
-    maxBytes: 2048,
-  });
+  const hot = buildHotMemory(
+    [claim({ taint: undefined }), claim({ id: 'c2', kind: 'pref', aiw: '喜欢短句' })],
+    {
+      maxBytes: 2048,
+    }
+  );
   assert.equal(hot.counts.rule, 1);
   assert.equal(hot.counts.pref, 1);
   assert.equal(hot.tainted, 0);
@@ -48,7 +57,7 @@ test('导入包：自己导出的 taint 保留，来源不明的降级为外部'
   const bundle = {
     version: EXPORT_VERSION,
     claims: [
-      claim({ id: 'own', aiw: '自己导出的' }),                 // 带 taint:'none'
+      claim({ id: 'own', aiw: '自己导出的' }), // 带 taint:'none'
       { id: 'unknown', kind: 'fact', aiw: '来路不明', title: 't', validFrom: 1 }, // 没有 taint
     ],
   };

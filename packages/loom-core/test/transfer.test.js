@@ -4,13 +4,29 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { SqliteLedger } from '../src/sqlite-ledger.js';
-import { exportBundle, importBundle, exportToFile, importFromFile, EXPORT_VERSION } from '../src/transfer.js';
+import {
+  exportBundle,
+  importBundle,
+  exportToFile,
+  importFromFile,
+  EXPORT_VERSION,
+} from '../src/transfer.js';
 
 const seed = (db, id, aiw) =>
   db.put({
-    id, kind: 'fact', body: aiw, aiw, title: aiw.slice(0, 8),
-    confidence: 'high', source: { eventId: 'e' }, epochId: 'ep', taint: 'none',
-    validFrom: 1, salience: 1, useCount: 0, cold: false,
+    id,
+    kind: 'fact',
+    body: aiw,
+    aiw,
+    title: aiw.slice(0, 8),
+    confidence: 'high',
+    source: { eventId: 'e' },
+    epochId: 'ep',
+    taint: 'none',
+    validFrom: 1,
+    salience: 1,
+    useCount: 0,
+    cold: false,
   });
 
 test('导出结构与版本号', () => {

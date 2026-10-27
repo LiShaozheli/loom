@@ -12,7 +12,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  SETTING_SPECS, SETTING_KEYS, normalizeSetting, pruneInvalid, validateChange,
+  SETTING_SPECS,
+  SETTING_KEYS,
+  normalizeSetting,
+  pruneInvalid,
+  validateChange,
 } from '../src/settings.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -54,7 +58,13 @@ test('布尔只接受真布尔和配置文件里的字符串写法', () => {
 });
 
 test('库路径只接受绝对路径，相对路径会随 cwd 漂移', () => {
-  for (const good of ['', 'C:\\Users\\x\\loom.db', 'C:/Users/x/loom.db', '/var/lib/loom.db', '\\\\nas\\share\\loom.db']) {
+  for (const good of [
+    '',
+    'C:\\Users\\x\\loom.db',
+    'C:/Users/x/loom.db',
+    '/var/lib/loom.db',
+    '\\\\nas\\share\\loom.db',
+  ]) {
     assert.equal(normalizeSetting('dbPath', good).ok, true, good);
   }
   for (const bad of ['loom.db', './loom.db', 'sub/dir/loom.db']) {
@@ -67,7 +77,13 @@ test('隔离列表去重、去空、去空白，且限长限量', () => {
   assert.deepEqual(r, { ok: true, value: ['a', 'b'] });
   assert.equal(normalizeSetting('isolatedSessions', 'a,b').ok, false);
   assert.equal(normalizeSetting('isolatedSessions', ['x'.repeat(201)]).ok, false);
-  assert.equal(normalizeSetting('isolatedSessions', Array.from({ length: 101 }, (_, i) => 's' + i)).ok, false);
+  assert.equal(
+    normalizeSetting(
+      'isolatedSessions',
+      Array.from({ length: 101 }, (_, i) => 's' + i)
+    ).ok,
+    false
+  );
 });
 
 test('不可设置的键一律拒绝', () => {
@@ -78,7 +94,10 @@ test('不可设置的键一律拒绝', () => {
 
 test('坏键被剔除、好键与未知键保留', () => {
   const { config, dropped } = pruneInvalid({
-    hotBytes: 4096, epochDays: 0, render: 'plain', 未来字段: { a: 1 },
+    hotBytes: 4096,
+    epochDays: 0,
+    render: 'plain',
+    未来字段: { a: 1 },
   });
   assert.equal(config.hotBytes, 4096);
   assert.equal(config.render, 'plain');

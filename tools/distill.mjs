@@ -16,7 +16,13 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { brief, generationMessages } from '../packages/loom-core/src/constrain.js';
-import { lintBody, stripTail, normalize, factPresent, identifiers } from '../packages/loom-core/src/aiw.js';
+import {
+  lintBody,
+  stripTail,
+  normalize,
+  factPresent,
+  identifiers,
+} from '../packages/loom-core/src/aiw.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, '../..');
@@ -52,14 +58,24 @@ async function chat(messages, maxTokens = 140) {
 function grade(draft, item) {
   const errors = lintBody(draft, { tier: 'full' }).filter((i) => i.level === 'ERROR');
   const missing = item.must_keep.filter((f) => !factPresent(draft, f));
-  const fabricated = identifiers(draft).filter((id) => !normalize(item.original).includes(normalize(id)));
-  return { ok: !errors.length && !missing.length && !fabricated.length, errors, missing, fabricated };
+  const fabricated = identifiers(draft).filter(
+    (id) => !normalize(item.original).includes(normalize(id))
+  );
+  return {
+    ok: !errors.length && !missing.length && !fabricated.length,
+    errors,
+    missing,
+    fabricated,
+  };
 }
 
 const rows = [];
 for (const mode of modes) {
   for (const item of corpus.items.slice(0, limit)) {
-    const b = mode === 'human' ? brief(item.original, { modelTerms: item.must_keep }) : brief(item.original);
+    const b =
+      mode === 'human'
+        ? brief(item.original, { modelTerms: item.must_keep })
+        : brief(item.original);
     let draft = '';
     let g;
     let tries = 0;
@@ -74,11 +90,18 @@ for (const mode of modes) {
     }
 
     rows.push({
-      mode, id: item.id, draft, ...g, tries, usage,
+      mode,
+      id: item.id,
+      draft,
+      ...g,
+      tries,
+      usage,
       len: draft.length,
       humanLen: stripTail(item.aiw).length,
     });
-    process.stdout.write(`  ${mode} ${item.id} ${g.ok ? '✓' : '✗'} tries=${tries} len=${draft.length}/${stripTail(item.aiw).length}\n`);
+    process.stdout.write(
+      `  ${mode} ${item.id} ${g.ok ? '✓' : '✗'} tries=${tries} len=${draft.length}/${stripTail(item.aiw).length}\n`
+    );
   }
 }
 
@@ -94,7 +117,14 @@ for (const mode of modes) {
   const hlen = avg(rs, (r) => r.humanLen);
   const ratio = avg(rs, (r) => r.len / r.humanLen);
   console.log(
-    `${mode.padEnd(9)}${pct(pass / rs.length).padStart(5)}${pct(first / rs.length).padStart(10)}${avg(rs, (r) => r.tries).toFixed(1).padStart(10)}${len.toFixed(0).padStart(10)}${hlen.toFixed(0).padStart(10)}${(ratio.toFixed(2) + '×').padStart(9)}`
+    `${mode.padEnd(9)}${pct(pass / rs.length).padStart(5)}${pct(first / rs.length).padStart(10)}${avg(
+      rs,
+      (r) => r.tries
+    )
+      .toFixed(1)
+      .padStart(
+        10
+      )}${len.toFixed(0).padStart(10)}${hlen.toFixed(0).padStart(10)}${(ratio.toFixed(2) + '×').padStart(9)}`
   );
 }
 
@@ -102,7 +132,9 @@ const fails = rows.filter((r) => !r.ok);
 if (fails.length) {
   console.log('\n失败样本：');
   for (const r of fails.slice(0, 8)) {
-    const why = r.missing.length ? `缺 ${r.missing.join(',')}` : r.errors[0]?.msg ?? `编造 ${r.fabricated.join(',')}`;
+    const why = r.missing.length
+      ? `缺 ${r.missing.join(',')}`
+      : (r.errors[0]?.msg ?? `编造 ${r.fabricated.join(',')}`);
     console.log(`  ${r.mode} ${r.id}：${why}\n    ${r.draft}`);
   }
 }

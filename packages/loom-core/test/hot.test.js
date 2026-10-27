@@ -20,7 +20,9 @@ test('规则全进，事实只进最近的几条', () => {
 });
 
 test('字节预算：超了就截断并提示', () => {
-  const claims = Array.from({ length: 50 }, (_, i) => claim('rule', `第${i}条规则：这是一句比较长的规则描述${i}。`));
+  const claims = Array.from({ length: 50 }, (_, i) =>
+    claim('rule', `第${i}条规则：这是一句比较长的规则描述${i}。`)
+  );
   const hot = buildHotMemory(claims, { maxBytes: 400 });
   assert.ok(hot.bytes <= 460, `bytes=${hot.bytes}`);
   assert.ok(hot.omitted > 0);

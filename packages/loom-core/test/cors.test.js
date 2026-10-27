@@ -64,7 +64,10 @@ test('所有 POST 路由的预检都允许 content-type', () => {
     assert.equal(r.headers['access-control-allow-origin'], '*', `${p} 缺 allow-origin`);
     const allowHeaders = String(r.headers['access-control-allow-headers'] ?? '').toLowerCase();
     assert.ok(allowHeaders.includes('content-type'), `${p} 预检缺 allow-headers: content-type`);
-    assert.ok(String(r.headers['access-control-allow-methods']).includes('POST'), `${p} 缺 allow-methods`);
+    assert.ok(
+      String(r.headers['access-control-allow-methods']).includes('POST'),
+      `${p} 缺 allow-methods`
+    );
   }
   for (const c of cleanups) c();
   fs.rmSync(dir, { recursive: true, force: true });
@@ -82,7 +85,12 @@ test('实际响应也带 allow-origin', async () => {
     end: (b) => (captured.body = b),
   };
   const payload = Buffer.from(JSON.stringify({ id: w.id.slice(0, 8) }));
-  const req = { method: 'POST', [Symbol.asyncIterator]: async function* () { yield payload; } };
+  const req = {
+    method: 'POST',
+    [Symbol.asyncIterator]: async function* () {
+      yield payload;
+    },
+  };
   await routes.get('/loom/forget').handler(req, res);
   assert.equal(captured.status, 200, captured.body);
   assert.equal(captured.headers['access-control-allow-origin'], '*');

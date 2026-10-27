@@ -8,8 +8,14 @@
 import { chars4Counter } from './contracts.js';
 
 const KIND_LABEL = {
-  fact: '事实', pref: '偏好', rule: '红线', proc: '流程',
-  relation: '关系', decision: '决策', open: '未决', opinion: '观点',
+  fact: '事实',
+  pref: '偏好',
+  rule: '红线',
+  proc: '流程',
+  relation: '关系',
+  decision: '决策',
+  open: '未决',
+  opinion: '观点',
 };
 
 /**
@@ -29,7 +35,13 @@ export function buildOutline(claims, opts = {}) {
     .map(([kind, list]) => {
       const title = `${KIND_LABEL[kind] ?? kind}（${list.length}）`;
       const subtree = list.reduce((s, c) => s + counter.count(c.title || ''), 0);
-      return { id: kind, kind, title, claims: list.length, tokens: { self: counter.count(title), subtree } };
+      return {
+        id: kind,
+        kind,
+        title,
+        claims: list.length,
+        tokens: { self: counter.count(title), subtree },
+      };
     })
     .sort((a, b) => b.claims - a.claims)
     .slice(0, maxNodes);
@@ -43,5 +55,11 @@ export function buildOutline(claims, opts = {}) {
     kept.push(n);
   }
 
-  return { nodes: kept, totalClaims: claims.length, usedTokens: used, budget, counter: counter.name };
+  return {
+    nodes: kept,
+    totalClaims: claims.length,
+    usedTokens: used,
+    budget,
+    counter: counter.name,
+  };
 }

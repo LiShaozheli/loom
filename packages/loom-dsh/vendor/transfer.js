@@ -10,11 +10,26 @@ import fs from 'node:fs';
 export const EXPORT_VERSION = 'loom-export/v1';
 
 const FIELDS = [
-  'id', 'kind', 'body', 'aiw', 'title', 'confidence', 'source', 'epochId', 'taint',
-  'validFrom', 'validTo', 'supersededBy', 'salience', 'useCount', 'lastUsedAt', 'cold',
+  'id',
+  'kind',
+  'body',
+  'aiw',
+  'title',
+  'confidence',
+  'source',
+  'epochId',
+  'taint',
+  'validFrom',
+  'validTo',
+  'supersededBy',
+  'salience',
+  'useCount',
+  'lastUsedAt',
+  'cold',
 ];
 
-const pick = (c) => Object.fromEntries(FIELDS.map((f) => [f, c[f]]).filter(([, v]) => v !== undefined));
+const pick = (c) =>
+  Object.fromEntries(FIELDS.map((f) => [f, c[f]]).filter(([, v]) => v !== undefined));
 
 /**
  * @param {{active:Function, get:Function}} ledger
