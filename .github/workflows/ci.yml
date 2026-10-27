@@ -40,6 +40,10 @@ jobs:
       - name: 静态检查（Biome：lint + format）
         run: npm run lint
 
+      # checkJs 一路开着却没在 CI 跑过，一跑 118 条——门禁补上，别再攒
+      - name: 类型检查（tsc --noEmit）
+        run: npm run typecheck
+
       - name: 单元测试
         run: npm test
 
